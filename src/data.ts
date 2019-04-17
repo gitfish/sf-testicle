@@ -1,8 +1,9 @@
-import { IAccessTokenSupplier, IAccessTokenResult, DefaultAccessTokenSupplier } from "./auth/core";
+import { IAccessSupplier, IAccess, DefaultAccessSupplier, createConstantAccessSupplier } from "./auth/core";
 import * as rp from "request-promise-native";
 
 interface IDataServiceOptions {
-    accessTokenSupplier?: IAccessTokenSupplier;
+    access?: IAccess;
+    accessSupplier?: IAccessSupplier;
 }
 
 interface IDataServiceConfig extends IDataServiceOptions {
@@ -10,7 +11,7 @@ interface IDataServiceConfig extends IDataServiceOptions {
 }
 
 const DataServiceDefaults : IDataServiceConfig = {
-    accessTokenSupplier: DefaultAccessTokenSupplier,
+    accessSupplier: DefaultAccessSupplier,
     versionInfo: {
         label: "Spring '19",
         url: "/services/data/v45.0",
@@ -69,17 +70,32 @@ interface IDataService {
 }
 
 class DataService implements IDataService {
-    private _accessTokenPromise : Promise<IAccessTokenResult>;
-    public accessTokenSupplier : IAccessTokenSupplier;
+    private _accessPromise : Promise<IAccess>;
+    private _accessSupplier : IAccessSupplier;
     constructor(rawOpts?: IDataServiceOptions) {
         const opts = { ...DataServiceDefaults, ...rawOpts };
-        this.accessTokenSupplier = opts.accessTokenSupplier;
+        this.accessSupplier = opts.accessSupplier;
+        this.access = opts.access;
     }
-    get accessTokenPromise() : Promise<IAccessTokenResult> {
-        if(!this._accessTokenPromise) {
-            this._accessTokenPromise = this.accessTokenSupplier();
+    get accessSupplier() {
+        return this._accessSupplier;
+    }
+    set accessSupplier(accessSupplier : IAccessSupplier) {
+        if(accessSupplier !== this._accessSupplier) {
+            delete this._accessPromise;
+            this._accessSupplier = accessSupplier;
         }
-        return this._accessTokenPromise;
+    }
+    set access(access : IAccess) {
+        if(access) {
+            this.accessSupplier = createConstantAccessSupplier(access);
+        }
+    }
+    get accessTokenPromise() : Promise<IAccess> {
+        if(!this._accessPromise) {
+            this._accessPromise = Promise.resolve(this.accessSupplier());
+        }
+        return this._accessPromise;
     }
     async get<T>(opts : any) : Promise<T> {
         const tr = await this.accessTokenPromise;

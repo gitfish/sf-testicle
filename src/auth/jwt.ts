@@ -1,7 +1,7 @@
 import * as crypto from "crypto";
 import * as rp from "request-promise-native";
 import * as fs from "fs";
-import { IAccessTokenResult, IAccessTokenSupplier } from "./core";
+import { IAccessSupplier, IAccess } from "./core";
 
 interface IAccessTokenRequest {
     loginUrl?: string;
@@ -28,7 +28,7 @@ const base64Encode = (buf : Buffer) => {
     .replace(/\//g, '_');
 };
 
-const getAccessToken = async (rawOpts : IAccessTokenRequest) : Promise<IAccessTokenResult> => {
+const getAccessToken = async (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
     const opts = { ...DefaultBearerAccessTokenRequest, ...rawOpts }; 
     const now = new Date();
     const expiry = now.getTime() + opts.assertionExpiryInterval;
@@ -65,7 +65,7 @@ const getAccessToken = async (rawOpts : IAccessTokenRequest) : Promise<IAccessTo
     });
 };
 
-const createAccessTokenSupplier = (opts : IAccessTokenRequest) : IAccessTokenSupplier => {
+const createAccessSupplier = (opts : IAccessTokenRequest) : IAccessSupplier => {
     return () => {
         return getAccessToken(opts);
     };
@@ -74,7 +74,7 @@ const createAccessTokenSupplier = (opts : IAccessTokenRequest) : IAccessTokenSup
 export {
     getAccessToken,
     getAccessToken as default,
-    createAccessTokenSupplier,
-    IAccessTokenRequest as IBearerAccessTokenRequest,
+    createAccessSupplier,
+    IAccessTokenRequest,
     DefaultBearerAccessTokenRequest
 }

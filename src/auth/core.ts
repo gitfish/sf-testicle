@@ -1,4 +1,4 @@
-interface IAccessTokenResponse {
+interface IAccess {
     access_token: string;
     scope?: string;
     instance_url?: string;
@@ -6,18 +6,25 @@ interface IAccessTokenResponse {
     token_type?: string;
 }
 
-interface IAccessTokenSupplier {
-    () : Promise<IAccessTokenResponse>;
+interface IAccessSupplier {
+    () : Promise<IAccess> | IAccess;
 }
 
-const DefaultAccessTokenSupplier : IAccessTokenSupplier = () => {
+const createConstantAccessSupplier = (access : IAccess) : IAccessSupplier => {
+    return () => {
+        return access;
+    };
+};
+
+const DefaultAccessSupplier : IAccessSupplier = () => {
     return Promise.reject({
         message: "An Access Token Supplier has not been configured"
     });
 };
 
 export {
-    IAccessTokenResponse as IAccessTokenResult,
-    IAccessTokenSupplier,
-    DefaultAccessTokenSupplier
+    IAccess,
+    IAccessSupplier,
+    DefaultAccessSupplier,
+    createConstantAccessSupplier
 }

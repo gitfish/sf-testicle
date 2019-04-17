@@ -1,4 +1,4 @@
-import { createAccessTokenSupplier } from "./auth/jwt";
+import { createAccessSupplier } from "./auth/jwt";
 import { DataService } from "./data";
 
 const privateKey = `-----BEGIN RSA PRIVATE KEY-----
@@ -30,14 +30,14 @@ TUYch/WUijOustZjlekf3sFGj56KvUWphcA26BFunFTDlJoW95+m
 -----END RSA PRIVATE KEY-----
 `;
 
-const accessTokenSupplier = createAccessTokenSupplier({
+const accessSupplier = createAccessSupplier({
     username: "mfisher@dev.one",
     clientId: "3MVG9pe2TCoA1Pf6I1c1KhtCP9xk.9gbX9NP41gdQDTtVvfUOJPg8P1PnrGJ4wd7y1eAEIin9epeViKJJqXy7",
     privateKey: privateKey
 });
 
 const dataService = new DataService({
-    accessTokenSupplier: accessTokenSupplier
+    accessSupplier: accessSupplier
 });
 
 const sample = async () => {
