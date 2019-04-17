@@ -52,6 +52,27 @@ const sample = async () => {
 
     const qar = await dataService.queryAll("select Id,Name from User");
     console.log("-- Query All Result: " + JSON.stringify(qar));
+
+    const accounts = await dataService.query("select Id,Name,(select Id,Name from Contacts) from Account");
+    console.log("-- Accounts: " + JSON.stringify(accounts));
+
+    const sr = await dataService.search('FIND {trail*} IN ALL FIELDS returning Contact(Id,Name)');
+    console.log("-- Search Result: " + JSON.stringify(sr));
+
+    const psr = await dataService.parameterizedSearch({
+        q: "trail*",
+        fields: ["id", "firstName", "lastName"],
+        sobjects: [
+            {
+                name: "Contact"
+            }
+        ],
+        in: "ALL",
+        overallLimit: 100,
+        defaultLimit: 10
+    });;
+
+    console.log("-- Parameterized Search Result: " + JSON.stringify(psr));
 };
 
 sample();

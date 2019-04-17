@@ -4,6 +4,7 @@ import * as rp from "request-promise-native";
 interface IDataServiceOptions {
     access?: IAccess;
     accessSupplier?: IAccessSupplier;
+    
 }
 
 interface IDataServiceConfig extends IDataServiceOptions {
@@ -62,11 +63,32 @@ interface IQueryExplainResult {
     plans?: IQueryPlan[];
 }
 
+interface ISearchSObjectSpec {
+    fields?: string;
+    name?: string;
+    limit?: number;
+}
+
+interface IParameterizedSearchRequest {
+    q?: string;
+    fields?: string[];
+    sobjects?: ISearchSObjectSpec[];
+    in?: string;
+    overallLimit?: number;
+    defaultLimit?: number;
+}
+
+interface ISearchResult {
+    searchRecords: IRecord[];
+}
+
 interface IDataService {
     getVersionInfo() : Promise<IVersionInfo[]>;
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
+    search(sosl : string) : Promise<ISearchResult>;
+    parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult>;
 }
 
 class DataService implements IDataService {
@@ -110,6 +132,19 @@ class DataService implements IDataService {
         };
         return rp(req);
     }
+    async post<T>(opts : any) : Promise<T> {
+        const tr = await this.accessTokenPromise;
+        const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
+        const req = { ...opts,
+            uri: uri,
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${tr.access_token}`
+            },
+            json: true
+        };
+        return rp(req);
+    }
     async getVersionInfo() : Promise<IVersionInfo[]> {
         return this.get({ path: "/services/data/" });
     }
@@ -130,9 +165,14 @@ class DataService implements IDataService {
         const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
         return this.get(vopts);
     }
+    async vpost<T>(opts : any) : Promise<T> {
+        const latestVersion = await this.getLatestVersion();
+        const  vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
+        return this.post(vopts);
+    }
     async query(soql : string) : Promise<IQueryResult> {
         return this.vget({
-            path: "/query",
+            path: "/query/",
             qs: {
                 q: soql
             }
@@ -140,7 +180,7 @@ class DataService implements IDataService {
     }
     async explain(soql : string) : Promise<IQueryExplainResult> {
         return this.vget({
-            path: "/query",
+            path: "/query/",
             qs: {
                 explain: soql
             }
@@ -148,10 +188,24 @@ class DataService implements IDataService {
     }
     async queryAll(soql : string) : Promise<IQueryResult> {
         return this.vget({
-            path: "/queryAll",
+            path: "/queryAll/",
             qs: {
                 q: soql
             }
+        });
+    }
+    async search(sosl : string) : Promise<ISearchResult> {
+        return this.vget({
+            path: "/search/",
+            qs: {
+                q: sosl
+            }
+        });
+    }
+    async parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult> {
+        return this.vpost({
+            path: "/parameterizedSearch/",
+            body: request
         });
     }
 }
@@ -160,6 +214,16 @@ export {
     IDataService,
     DataService,
     IDataServiceOptions,
-    DataServiceDefaults
+    DataServiceDefaults,
+    IVersionInfo,
+    IRecordAttributes,
+    IRecord,
+    IQueryResult,
+    IQueryPlanFeedbackNote,
+    IQueryPlan,
+    IQueryExplainResult,
+    ISearchSObjectSpec,
+    IParameterizedSearchRequest,
+    ISearchResult
 }
 
