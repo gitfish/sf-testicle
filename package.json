@@ -1,0 +1,21 @@
+{
+  "name": "sf-testicle",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "request": "^2.88.0",
+    "request-promise-native": "^1.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^11.13.4",
+    "@types/request-promise-native": "^1.0.15",
+    "typescript": "^3.4.3"
+  }
+}
