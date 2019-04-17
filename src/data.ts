@@ -38,11 +38,34 @@ interface IQueryResult {
     done: boolean;
     totalSize: number;
     records?: IRecord[];
+    nextRecordsUrl?: string;
+}
+
+interface IQueryPlanFeedbackNote {
+    description?: string;
+    fields?: string[];
+    tableEnumOrId?: string;
+}
+
+interface IQueryPlan {
+    cardinality?: number;
+    fields?: string[];
+    leadingOperationType?: string;
+    notes?: IQueryPlanFeedbackNote[];
+    relativeCost?: number;
+    sobjectCardinality?: number;
+    sobjectType?: string;
+}
+
+interface IQueryExplainResult {
+    plans?: IQueryPlan[];
 }
 
 interface IDataService {
     getVersionInfo() : Promise<IVersionInfo[]>;
     query(soql : string) : Promise<IQueryResult>;
+    explain(soql : string) : Promise<IQueryExplainResult>;
+    queryAll(soql : string) : Promise<IQueryResult>;
 }
 
 class DataService implements IDataService {
@@ -58,17 +81,21 @@ class DataService implements IDataService {
         }
         return this._accessTokenPromise;
     }
-    async getVersionInfo() : Promise<IVersionInfo[]> {
-        // TODO: need to handle errors (to automatically grab another access token when expired, for example)
+    async get<T>(opts : any) : Promise<T> {
         const tr = await this.accessTokenPromise;
-        return rp({
-            url: `${tr.instance_url}/services/data/`,
+        const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
+        const req = { ...opts,
+            uri: uri,
             method: "GET",
             headers: {
                 Authorization: `Bearer ${tr.access_token}`
             },
             json: true
-        });
+        };
+        return rp(req);
+    }
+    async getVersionInfo() : Promise<IVersionInfo[]> {
+        return this.get({ path: "/services/data/" });
     }
     async getLatestVersion() : Promise<IVersionInfo> {
         const versions = await this.getVersionInfo();
@@ -82,15 +109,30 @@ class DataService implements IDataService {
         }
         return DataServiceDefaults.versionInfo;
     }
-    async query(soql : string) : Promise<IQueryResult> {
+    async vget<T>(opts : any) : Promise<T> {
         const latestVersion = await this.getLatestVersion();
-        const tr = await this.accessTokenPromise;
-        return rp({
-            url: `${tr.instance_url}${latestVersion.url}/query`,
-            headers: {
-                Authorization: `Bearer ${tr.access_token}`
-            },
-            json: true,
+        const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
+        return this.get(vopts);
+    }
+    async query(soql : string) : Promise<IQueryResult> {
+        return this.vget({
+            path: "/query",
+            qs: {
+                q: soql
+            }
+        });
+    }
+    async explain(soql : string) : Promise<IQueryExplainResult> {
+        return this.vget({
+            path: "/query",
+            qs: {
+                explain: soql
+            }
+        });
+    }
+    async queryAll(soql : string) : Promise<IQueryResult> {
+        return this.vget({
+            path: "/queryAll",
             qs: {
                 q: soql
             }
