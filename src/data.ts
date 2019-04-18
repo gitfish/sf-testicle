@@ -27,8 +27,8 @@ interface IVersionInfo {
 }
 
 interface IRecordAttributes {
-    type: string;
-    url: string;
+    type?: string;
+    url?: string;
 }
 
 interface IRecord {
@@ -95,9 +95,10 @@ interface ISaveResult {
     success: boolean;
 }
 
-interface IGetFieldValuesRequest {
+interface IRetrieveRequest {
     type: string;
-    Id: string;
+    Id?: string;
+    externalIdField?: string;
     fields: string[];
 }
 
@@ -112,7 +113,8 @@ interface IDataService {
     create(record : IRecord) : Promise<ISaveResult>;
     update(record : IRecord) : Promise<ISaveResult>;
     delete(record : IRecord) : Promise<any>;
-    getFieldValues(request : IGetFieldValuesRequest) : Promise<IRecord>;
+    getFieldValues(request : IRetrieveRequest) : Promise<IRecord>;
+    retrieve(request : IRetrieveRequest) : Promise<IRecord>;
 }
 
 class DataService implements IDataService {
@@ -145,7 +147,7 @@ class DataService implements IDataService {
         }
         return this._accessPromise;
     }
-    request<T>(opts : any) : Promise<T> {
+    protected request<T>(opts : any) : Promise<T> {
         return this.accessPromise.then(tr => {
             const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
             const headers = opts && opts.headers ? opts.header : {};
@@ -254,33 +256,44 @@ class DataService implements IDataService {
             body: request
         });
     }
-    private getType(record : IRecord) {
-        return record.attributes && record.attributes.type ? record.attributes.type : record.type;
+    private getSObjectType(record : IRecord) {
+        const type = record.attributes ? record.attributes.type : undefined;
+        if(!type) {
+            throw { errorCode: "INVALID_ARGUMENT", message: "Unable to resolve record sobject type" };
+        }
+        return type;
     }
     create(record : IRecord) : Promise<ISaveResult> {
-        const reqRecord = { ...record };
-        delete reqRecord.type;
         return this.vpost({
-            path: `/sobjects/${this.getType(record)}/`,
-            body: reqRecord
+            path: `/sobjects/${this.getSObjectType(record)}/`,
+            body: record
         });
     }
     update(record : IRecord) : Promise<ISaveResult> {
-        const reqRecord = { ...record };
-        delete reqRecord.type;
         return this.vpatch({
-            path: `/sobjects/${this.getType(record)}/${record.Id}`,
-            body: reqRecord
+            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
+            body: record
         });
     }
     delete(record : IRecord) : Promise<any> {
         return this.vdel({
-            path: `/sobjects/${this.getType(record)}/${record.Id}`
+            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`
         });
     }
-    getFieldValues(request : IGetFieldValuesRequest) : Promise<IRecord> {
+    getFieldValues(request : IRetrieveRequest) : Promise<IRecord> {
         return this.vget({
             path: `/sobjects/${request.type}/${request.Id}`,
+            qs: {
+                fields: request.fields.join(",")
+            }
+        });
+    }
+    retrieve(request : IRetrieveRequest) : Promise<IRecord> {
+        const path = request.externalIdField ?
+            `/sobjects/${request.type}/${request.externalIdField}/${request.Id}` :
+            `/sobjects/${request.type}/${request.Id}`;
+        return this.vget({
+            path: path,
             qs: {
                 fields: request.fields.join(",")
             }
