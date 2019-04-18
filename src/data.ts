@@ -33,6 +33,7 @@ interface IRecordAttributes {
 
 interface IRecord {
     attributes?: IRecordAttributes;
+    Id?: string;
     [key: string] : any; 
 }
 
@@ -82,18 +83,42 @@ interface ISearchResult {
     searchRecords: IRecord[];
 }
 
+interface IError {
+    fields?: string[];
+    message?: string;
+    statusCode?: string;
+}
+
+interface ISaveResult {
+    id: string;
+    errors?: IError[];
+    success: boolean;
+}
+
+interface IGetFieldValuesRequest {
+    type: string;
+    Id: string;
+    fields: string[];
+}
+
 interface IDataService {
-    getVersionInfo() : Promise<IVersionInfo[]>;
+    versionInfo : Promise<IVersionInfo[]>;
+    latestVersion : Promise<IVersionInfo>;
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
     search(sosl : string) : Promise<ISearchResult>;
     parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult>;
+    create(record : IRecord) : Promise<ISaveResult>;
+    update(record : IRecord) : Promise<ISaveResult>;
+    delete(record : IRecord) : Promise<any>;
+    getFieldValues(request : IGetFieldValuesRequest) : Promise<IRecord>;
 }
 
 class DataService implements IDataService {
     private _accessPromise : Promise<IAccess>;
     private _accessSupplier : IAccessSupplier;
+    private _versionInfoPromise : Promise<IVersionInfo[]>;
     constructor(rawOpts?: IDataServiceOptions) {
         const opts = { ...DataServiceDefaults, ...rawOpts };
         this.accessSupplier = opts.accessSupplier;
@@ -113,64 +138,84 @@ class DataService implements IDataService {
             this.accessSupplier = createConstantAccessSupplier(access);
         }
     }
-    get accessTokenPromise() : Promise<IAccess> {
+    get accessPromise() : Promise<IAccess> {
         if(!this._accessPromise) {
             this._accessPromise = Promise.resolve(this.accessSupplier());
         }
         return this._accessPromise;
     }
-    async get<T>(opts : any) : Promise<T> {
-        const tr = await this.accessTokenPromise;
-        const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
-        const req = { ...opts,
-            uri: uri,
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${tr.access_token}`
-            },
-            json: true
-        };
-        return rp(req);
-    }
-    async post<T>(opts : any) : Promise<T> {
-        const tr = await this.accessTokenPromise;
-        const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
-        const req = { ...opts,
-            uri: uri,
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${tr.access_token}`
-            },
-            json: true
-        };
-        return rp(req);
-    }
-    async getVersionInfo() : Promise<IVersionInfo[]> {
-        return this.get({ path: "/services/data/" });
-    }
-    async getLatestVersion() : Promise<IVersionInfo> {
-        const versions = await this.getVersionInfo();
-        if(versions && versions.length > 0) {
-            return versions.reduce((pv, cv) => {
-                if(pv && cv) {
-                    return parseFloat(cv.version) > parseFloat(pv.version) ? cv : pv;
-                }
-                return cv;
+    request<T>(opts : any) : Promise<T> {
+        return this.accessPromise.then(tr => {
+            const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
+            const headers = opts && opts.headers ? opts.header : {};
+            headers.Authorization = `Bearer ${tr.access_token}`;
+            delete opts.headers;
+            const req = { ...opts,
+                uri: uri,
+                headers: headers,
+                json: true
+            };
+            return rp(req).catch(err => {
+                return Promise.reject(err.error ? err.error : err);
             });
+        });
+    }
+    get<T>(opts : any) : Promise<T> {
+        return this.request({ ...opts, method: "GET" });
+    }
+    post<T>(opts : any) : Promise<T> {
+        return this.request({ ...opts, method: "POST" });
+    }
+    patch<T>(opts : any) : Promise<T> {
+        return this.request({ ...opts, method: "PATCH" });
+    }
+    del<T>(opts : any) : Promise<T> {
+        return this.request({ ...opts, method: "DELETE" });
+    }
+    get versionInfo() : Promise<IVersionInfo[]> {
+        if(!this._versionInfoPromise) {
+            this._versionInfoPromise = this.get({ path: "/services/data/" });
         }
-        return DataServiceDefaults.versionInfo;
+        return this._versionInfoPromise;
     }
-    async vget<T>(opts : any) : Promise<T> {
-        const latestVersion = await this.getLatestVersion();
-        const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
-        return this.get(vopts);
+    get latestVersion() : Promise<IVersionInfo> {
+        return this.versionInfo.then(versions => {
+            if(versions && versions.length > 0) {
+                return versions.reduce((pv, cv) => {
+                    if(pv && cv) {
+                        return parseFloat(cv.version) > parseFloat(pv.version) ? cv : pv;
+                    }
+                    return cv;
+                });
+            }
+            return DataServiceDefaults.versionInfo;
+        });
     }
-    async vpost<T>(opts : any) : Promise<T> {
-        const latestVersion = await this.getLatestVersion();
-        const  vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
-        return this.post(vopts);
+    vget<T>(opts : any) : Promise<T> {
+        return this.latestVersion.then(latestVersion => {
+            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
+            return this.get(vopts);
+        });
     }
-    async query(soql : string) : Promise<IQueryResult> {
+    vpost<T>(opts : any) : Promise<T> {
+        return this.latestVersion.then(latestVersion => {
+            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
+            return this.post(vopts);
+        });
+    }
+    vpatch<T>(opts : any) : Promise<T> {
+        return this.latestVersion.then(latestVersion => {
+            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
+            return this.patch(vopts);
+        });
+    }
+    vdel<T>(opts : any) : Promise<T> {
+        return this.latestVersion.then(latestVersion => {
+            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
+            return this.del(vopts);
+        });
+    }
+    query(soql : string) : Promise<IQueryResult> {
         return this.vget({
             path: "/query/",
             qs: {
@@ -178,7 +223,7 @@ class DataService implements IDataService {
             }
         });
     }
-    async explain(soql : string) : Promise<IQueryExplainResult> {
+    explain(soql : string) : Promise<IQueryExplainResult> {
         return this.vget({
             path: "/query/",
             qs: {
@@ -186,7 +231,7 @@ class DataService implements IDataService {
             }
         });
     }
-    async queryAll(soql : string) : Promise<IQueryResult> {
+    queryAll(soql : string) : Promise<IQueryResult> {
         return this.vget({
             path: "/queryAll/",
             qs: {
@@ -194,7 +239,7 @@ class DataService implements IDataService {
             }
         });
     }
-    async search(sosl : string) : Promise<ISearchResult> {
+    search(sosl : string) : Promise<ISearchResult> {
         return this.vget({
             path: "/search/",
             qs: {
@@ -202,10 +247,42 @@ class DataService implements IDataService {
             }
         });
     }
-    async parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult> {
+    parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult> {
         return this.vpost({
             path: "/parameterizedSearch/",
             body: request
+        });
+    }
+    private getType(record : IRecord) {
+        return record.attributes && record.attributes.type ? record.attributes.type : record.type;
+    }
+    create(record : IRecord) : Promise<ISaveResult> {
+        const reqRecord = { ...record };
+        delete reqRecord.type;
+        return this.vpost({
+            path: `/sobjects/${this.getType(record)}/`,
+            body: reqRecord
+        });
+    }
+    update(record : IRecord) : Promise<ISaveResult> {
+        const reqRecord = { ...record };
+        delete reqRecord.type;
+        return this.vpatch({
+            path: `/sobjects/${this.getType(record)}/${record.Id}`,
+            body: reqRecord
+        });
+    }
+    delete(record : IRecord) : Promise<any> {
+        return this.vdel({
+            path: `/sobjects/${this.getType(record)}/${record.Id}`
+        });
+    }
+    getFieldValues(request : IGetFieldValuesRequest) : Promise<IRecord> {
+        return this.vget({
+            path: `/sobjects/${request.type}/${request.Id}`,
+            qs: {
+                fields: request.fields.join(",")
+            }
         });
     }
 }

@@ -41,7 +41,7 @@ const dataService = new DataService({
 });
 
 const sample = async () => {
-    const versionInfo = await dataService.getVersionInfo();
+    const versionInfo = await dataService.versionInfo;
     console.log("-- Version Info: " + JSON.stringify(versionInfo));
 
     const qr = await dataService.query("select Id,Name from User");
@@ -59,20 +59,48 @@ const sample = async () => {
     const sr = await dataService.search('FIND {trail*} IN ALL FIELDS returning Contact(Id,Name)');
     console.log("-- Search Result: " + JSON.stringify(sr));
 
-    const psr = await dataService.parameterizedSearch({
-        q: "trail*",
-        fields: ["id", "firstName", "lastName"],
-        sobjects: [
-            {
-                name: "Contact"
-            }
-        ],
-        in: "ALL",
-        overallLimit: 100,
-        defaultLimit: 10
-    });;
+    try {
+        const psr = await dataService.parameterizedSearch({
+            q: "trail*",
+            fields: ["id", "firstName", "lastName"],
+            sobjects: [
+                {
+                    name: "Contact"
+                }
+            ],
+            in: "ALL",
+            overallLimit: 100,
+            defaultLimit: 10
+        });
+        console.log("-- Parameterized Search Result: " + JSON.stringify(psr));
+    } catch(ex) {
+        console.log("-- Parameterized Search Result Error: " + JSON.stringify(ex));
+    }
 
-    console.log("-- Parameterized Search Result: " + JSON.stringify(psr));
+    try {
+        const cr = await dataService.create({ type: "Contact", firstName: "Lost", lastName: "Shoes", email: "mfisher.au@gmail.com" });
+        console.log(`-- Create Result: ${JSON.stringify(cr)}`);
+    } catch(ex) {
+        console.log("-- Error Creating: " + JSON.stringify(ex));
+    }
+    
+    try {
+        const ecr = await dataService.create({ type: "Contact" });
+        console.log(`-- Create error: ${JSON.stringify(ecr)}`)
+    } catch(ex) {
+        console.log("-- Error Creating empty: " + JSON.stringify(ex));
+    }
+
+    const contactsResult = await dataService.query(`select Id from Contact where Name = 'Lost Shoes'`);
+    console.log("-- Contacts Result: " + JSON.stringify(contactsResult));
+    if(contactsResult.records && contactsResult.records.length > 0) {
+        try {
+            await dataService.delete(contactsResult.records[0]);
+            console.log("-- Deleted");
+        } catch(ex) {
+            console.log("-- Delete error: " + JSON.stringify(ex));
+        }
+    }
 };
 
 sample();

@@ -28,7 +28,7 @@ const base64Encode = (buf : Buffer) => {
     .replace(/\//g, '_');
 };
 
-const getAccessToken = async (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
+const getAccessToken = (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
     const opts = { ...DefaultBearerAccessTokenRequest, ...rawOpts }; 
     const now = new Date();
     const expiry = now.getTime() + opts.assertionExpiryInterval;
@@ -62,6 +62,8 @@ const getAccessToken = async (rawOpts : IAccessTokenRequest) : Promise<IAccess> 
             assertion: jwtAssertion
         },
         json: true
+    }).then(r => {
+        return r as IAccess;
     });
 };
 
