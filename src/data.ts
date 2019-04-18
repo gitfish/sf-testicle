@@ -116,8 +116,8 @@ interface IDataService {
 }
 
 class DataService implements IDataService {
-    private _accessPromise : Promise<IAccess>;
     private _accessSupplier : IAccessSupplier;
+    private _accessPromise : Promise<IAccess>;
     private _versionInfoPromise : Promise<IVersionInfo[]>;
     constructor(rawOpts?: IDataServiceOptions) {
         const opts = { ...DataServiceDefaults, ...rawOpts };
@@ -130,6 +130,7 @@ class DataService implements IDataService {
     set accessSupplier(accessSupplier : IAccessSupplier) {
         if(accessSupplier !== this._accessSupplier) {
             delete this._accessPromise;
+            delete this._versionInfoPromise;
             this._accessSupplier = accessSupplier;
         }
     }
