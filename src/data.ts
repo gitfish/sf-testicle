@@ -1,30 +1,30 @@
-import { IAccessSupplier, IAccess, DefaultAccessSupplier, createConstantAccessSupplier } from "./auth/core";
+import { IAccessSupplier, IAccess } from "./auth/core";
 import "isomorphic-fetch";
 import * as qs from "qs";
+import { jsonResponseHandler, jsonResponseErrorHandler } from "./common";
 
-interface IDataServiceOptions {
-    access?: IAccess;
-    accessSupplier?: IAccessSupplier;
-    
+interface IApiVersion {
+    version?: string;
+    label?: string;
+    url?: string;
 }
 
-interface IDataServiceConfig extends IDataServiceOptions {
-    versionInfo?: IVersionInfo;
+interface IConfig {
+    apiVersion : IApiVersion;
 }
 
-const DataServiceDefaults : IDataServiceConfig = {
-    accessSupplier: DefaultAccessSupplier,
-    versionInfo: {
+const Defaults : IConfig = {
+    apiVersion: {
         label: "Spring '19",
         url: "/services/data/v45.0",
         version: "45.0"
     }
 };
 
-interface IVersionInfo {
-    version?: string;
-    label?: string;
-    url?: string;
+interface IDataServiceOptions {
+    access?: IAccess;
+    accessSupplier?: IAccessSupplier;
+    apiVersion?: IApiVersion;
 }
 
 interface IRecordAttributes {
@@ -91,12 +91,12 @@ interface IError {
 }
 
 interface ISaveResult {
-    id: string;
+    id?: string;
     errors?: IError[];
     success: boolean;
 }
 
-interface IUpsertResult {
+interface IUpsertResult extends ISaveResult {
     created?: boolean;
 }
 
@@ -107,7 +107,17 @@ interface IRetrieveRequest {
     fields: string[];
 }
 
-interface IDataOperations {
+interface ISubRequest {
+    binaryPartName?: string;
+    binaryPartNameAlias?: string;
+    method?: string;
+    richInput?: any;
+    url?: string;
+    [key : string] : any;
+}
+
+interface IDataService {
+    getApiVersion() : Promise<IApiVersion>;
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
@@ -120,19 +130,18 @@ interface IDataOperations {
     retrieve(request : IRetrieveRequest) : Promise<IRecord>;
 }
 
-interface IDataService extends IDataOperations {
-    versionInfo : Promise<IVersionInfo[]>;
-    latestVersion : Promise<IVersionInfo>;
-}
-
 class DataService implements IDataService {
     private _accessSupplier : IAccessSupplier;
+    private _access : IAccess;
     private _accessPromise : Promise<IAccess>;
-    private _versionInfoPromise : Promise<IVersionInfo[]>;
-    constructor(rawOpts?: IDataServiceOptions) {
-        const opts = { ...DataServiceDefaults, ...rawOpts };
-        this.accessSupplier = opts.accessSupplier;
-        this.access = opts.access;
+    private _apiVersion : IApiVersion;
+    private _apiVersionsPromise : Promise<IApiVersion[]>;
+    private _apiVersionPromise : Promise<IApiVersion>;
+    
+    constructor(opts?: IDataServiceOptions) {
+        this.accessSupplier = opts ? opts.accessSupplier : undefined;
+        this.access = opts ? opts.access : undefined;
+        this.apiVersion = opts ? opts.apiVersion : undefined;
     }
     get accessSupplier() {
         return this._accessSupplier;
@@ -140,115 +149,117 @@ class DataService implements IDataService {
     set accessSupplier(accessSupplier : IAccessSupplier) {
         if(accessSupplier !== this._accessSupplier) {
             delete this._accessPromise;
-            delete this._versionInfoPromise;
+            delete this._apiVersionsPromise;
+            delete this._apiVersionPromise;
             this._accessSupplier = accessSupplier;
         }
     }
-    set access(access : IAccess) {
-        if(access) {
-            this.accessSupplier = createConstantAccessSupplier(access);
+    get access() {
+        return this._access;
+    }
+    set access(value : IAccess) {
+        if(value !== this._access) {
+            this._access = value;
+            delete this._accessPromise;
         }
     }
-    get accessPromise() : Promise<IAccess> {
+    get apiVersion() {
+        return this._apiVersion;
+    }
+    set apiVersion(value) {
+        if(value !== this._apiVersion) {
+            this._apiVersion = value;
+            delete this._apiVersionPromise;
+        }
+    }
+    protected get accessPromise() : Promise<IAccess> {
         if(!this._accessPromise) {
-            this._accessPromise = Promise.resolve(this.accessSupplier());
+            if(this.access) {
+                this._accessPromise = Promise.resolve(this._access);
+            } else if(this.accessSupplier) {
+                this._accessPromise = Promise.resolve(this.accessSupplier());
+            } else {
+                this._accessPromise = Promise.reject({ code: "ILLEGAL_STATE", message: "Access or Access Supplier has not been configured" });
+            }
         }
         return this._accessPromise;
     }
-    protected _fetch<T>(opts : any) : Promise<T> {
-        return this.accessPromise.then(tr => {
-            let uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
-            if(opts.qs) {
-                uri += "?" + qs.stringify(opts.qs);
-            }
-            const headers = opts && opts.headers ? opts.header : {};
-            const fetchHeaders = { "Content-Type": "application/json", ...headers };
-            fetchHeaders.Authorization = `Bearer ${tr.access_token}`;
-            const fetchOptions : any = {
-                headers: fetchHeaders
-            };
-            if(opts.method) {
-                fetchOptions.method = opts.method
-            }
-            if(opts.body) {
-                fetchOptions.body = typeof(opts.body) === "object" ? JSON.stringify(opts.body) : opts.body;
-            } else if(opts.form) {
-                fetchOptions.body = opts.form;
-            }
-            return fetch(uri, fetchOptions).then(response => {
-                if(opts.resolveWithFullResponse) {
-                    return response;
-                }
-                if(response.ok) {
-                    return response.json();
-                }
-                return response.json().then(error => {
-                    throw {
-                        status: response.status,
-                        statusText: response.statusText,
-                        error: error
-                    };
+    protected get apiVersionsPromise() : Promise<IApiVersion[]> {
+        if(!this._apiVersionsPromise) {
+            this._apiVersionsPromise = this.accessPromise.then(tr => {
+                return fetch(`${tr.instance_url}/services/data/`, {
+                    headers: {
+                        Authorization: `Bearer ${tr.access_token}`
+                    }
+                }).then(jsonResponseHandler);
+            });
+        }
+        return this._apiVersionsPromise;
+    }
+    protected get apiVersionPromise() : Promise<IApiVersion> {
+        if(!this._apiVersionPromise) {
+            if(this.apiVersion) {
+                this._apiVersionPromise = Promise.resolve(this.apiVersion);
+            } else {
+                this._apiVersionPromise = this.apiVersionsPromise.then(versions => {
+                    if(versions && versions.length > 0) {
+                        return versions.reduce((pv, cv) => {
+                            if(pv && cv) {
+                                return parseFloat(cv.version) > parseFloat(pv.version) ? cv : pv;
+                            }
+                            return cv;
+                        });
+                    }
+                    return Defaults.apiVersion;
                 });
+            }
+        }
+        return this._apiVersionPromise;
+    }
+    
+    public fetch(opts : any) : Promise<any> {
+        return this.accessPromise.then(tr => {
+            return this.apiVersionPromise.then(apiVersion => {
+                let url = `${tr.instance_url}${apiVersion.url}${opts.path}`;
+                if(opts.qs) {
+                    url += `?${qs.stringify(opts.qs)}`;
+                }
+                const headers = {
+                    Authorization: `Bearer ${tr.access_token}`
+                };
+                headers["Content-Type"] = opts.body ? "application/json" : undefined;
+
+                const fetchOpts = {
+                    method: opts.method ? opts.method : opts.body || opts.form ? "POST" : "GET",
+                    headers: headers,
+                    body: opts.form ? opts.form : opts.body ? JSON.stringify(opts.body) : undefined
+                };
+                let fp = fetch(url, fetchOpts);
+                if(!opts.resolveWithFullResponse) {
+                    fp = fp.then(jsonResponseHandler);
+                }
+                return fp;
             });
         });
+
     }
-    get<T>(opts : any) : Promise<T> {
-        return this._fetch({ ...opts, method: "GET" });
+    get(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "GET" });
     }
-    post<T>(opts : any) : Promise<T> {
-        return this._fetch({ ...opts, method: "POST" });
+    post(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "POST" });
     }
-    patch<T>(opts : any) : Promise<T> {
-        return this._fetch({ ...opts, method: "PATCH" });
+    patch(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "PATCH" });
     }
-    del<T>(opts : any) : Promise<T> {
-        return this._fetch({ ...opts, method: "DELETE" });
+    del(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "DELETE" });
     }
-    get versionInfo() : Promise<IVersionInfo[]> {
-        if(!this._versionInfoPromise) {
-            this._versionInfoPromise = this.get({ path: "/services/data/" });
-        }
-        return this._versionInfoPromise;
-    }
-    get latestVersion() : Promise<IVersionInfo> {
-        return this.versionInfo.then(versions => {
-            if(versions && versions.length > 0) {
-                return versions.reduce((pv, cv) => {
-                    if(pv && cv) {
-                        return parseFloat(cv.version) > parseFloat(pv.version) ? cv : pv;
-                    }
-                    return cv;
-                });
-            }
-            return DataServiceDefaults.versionInfo;
-        });
-    }
-    vget<T>(opts : any) : Promise<T> {
-        return this.latestVersion.then(latestVersion => {
-            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
-            return this.get(vopts);
-        });
-    }
-    vpost<T>(opts : any) : Promise<T> {
-        return this.latestVersion.then(latestVersion => {
-            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
-            return this.post(vopts);
-        });
-    }
-    vpatch<T>(opts : any) : Promise<T> {
-        return this.latestVersion.then(latestVersion => {
-            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
-            return this.patch(vopts);
-        });
-    }
-    vdel<T>(opts : any) : Promise<T> {
-        return this.latestVersion.then(latestVersion => {
-            const vopts = { ...opts, path: `${latestVersion.url}${opts.path}` };
-            return this.del(vopts);
-        });
+    getApiVersion() : Promise<IApiVersion> {
+        return this.apiVersionPromise;
     }
     query(soql : string) : Promise<IQueryResult> {
-        return this.vget({
+        return this.get({
             path: "/query/",
             qs: {
                 q: soql
@@ -256,7 +267,7 @@ class DataService implements IDataService {
         });
     }
     explain(soql : string) : Promise<IQueryExplainResult> {
-        return this.vget({
+        return this.get({
             path: "/query/",
             qs: {
                 explain: soql
@@ -264,7 +275,7 @@ class DataService implements IDataService {
         });
     }
     queryAll(soql : string) : Promise<IQueryResult> {
-        return this.vget({
+        return this.get({
             path: "/queryAll/",
             qs: {
                 q: soql
@@ -272,7 +283,7 @@ class DataService implements IDataService {
         });
     }
     search(sosl : string) : Promise<ISearchResult> {
-        return this.vget({
+        return this.get({
             path: "/search/",
             qs: {
                 q: sosl
@@ -280,7 +291,7 @@ class DataService implements IDataService {
         });
     }
     parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult> {
-        return this.vpost({
+        return this.post({
             path: "/parameterizedSearch/",
             body: request
         });
@@ -293,27 +304,33 @@ class DataService implements IDataService {
         return type;
     }
     create(record : IRecord) : Promise<ISaveResult> {
-        return this.vpost({
+        return this.post({
             path: `/sobjects/${this.getSObjectType(record)}/`,
             body: { ...record, attributes: undefined }
         });
     }
     update(record : IRecord) : Promise<any> {
-        return this.vpatch({
+        return this.patch({
             path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
-            body: { ...record, Id: undefined, attributes: undefined }
+            body: { ...record, Id: undefined, attributes: undefined },
+            resolveWithFullResponse: true
+        }).then(response => {
+            if(!response.ok) {
+                return jsonResponseErrorHandler(response);
+            }
         });
     }
     delete(record : IRecord) : Promise<any> {
-        return this.vdel({
-            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`
+        return this.del({
+            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
+            resolveWithFullResponse: true
         });
     }
     retrieve(request : IRetrieveRequest) : Promise<IRecord> {
         const path = request.externalIdField ?
             `/sobjects/${request.type}/${request.externalIdField}/${request.Id}` :
             `/sobjects/${request.type}/${request.Id}`;
-        return this.vget({
+        return this.get({
             path: path,
             qs: {
                 fields: request.fields.join(",")
@@ -338,7 +355,7 @@ class DataService implements IDataService {
         const path = `/sobjects/${type}/${externalIdField}/${record[externalIdField]}`;
         const body = { ...record, Id: undefined };
         delete body[externalIdField];
-        return this.vpatch<any>({
+        return this.patch({
             path: path,
             body: body,
             resolveWithFullResponse: true
@@ -353,14 +370,7 @@ class DataService implements IDataService {
                 }
                 return { success: true };
             }
-            return response.json().then(error => {
-                throw {
-                    status: response.status,
-                    statusText: response.statusText,
-                    error: error
-                };
-            });
-            
+            return jsonResponseErrorHandler(response);
         });
     }
 }
@@ -369,8 +379,9 @@ export {
     IDataService,
     DataService,
     IDataServiceOptions,
-    DataServiceDefaults,
-    IVersionInfo,
+    IConfig,
+    Defaults,
+    IApiVersion,
     IRecordAttributes,
     IRecord,
     IQueryResult,

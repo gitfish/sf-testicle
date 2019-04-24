@@ -3,6 +3,7 @@ import "isomorphic-fetch";
 import "isomorphic-form-data";
 import * as fs from "fs";
 import { IAccessSupplier, IAccess } from "./core";
+import { jsonResponseHandler } from "../common";
 
 interface IAccessTokenRequest {
     loginUrl?: string;
@@ -62,17 +63,7 @@ const getAccessToken = (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
         method: "POST",
         body: formData,
         redirect: "follow"
-    }).then(response => {
-        if(response.ok) {
-            return response.json();
-        }
-        return Promise.reject({
-            status: response.status,
-            statusText: response.statusText,
-            message: response.statusText,
-            details: response.json()
-        });
-    });
+    }).then(jsonResponseHandler);
 };
 
 const createAccessSupplier = (opts : IAccessTokenRequest) : IAccessSupplier => {

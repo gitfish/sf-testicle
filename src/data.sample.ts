@@ -41,8 +41,8 @@ const dataService = new DataService({
 });
 
 const sample = async () => {
-    const versionInfo = await dataService.versionInfo;
-    console.log("-- Version Info: " + JSON.stringify(versionInfo));
+    const apiVersion = await dataService.getApiVersion();
+    console.log("-- Version Info: " + JSON.stringify(apiVersion));
 
     const qr = await dataService.query("select Id,Name from User");
     console.log("-- Query Result: " + JSON.stringify(qr));
@@ -88,13 +88,27 @@ const sample = async () => {
 
         const contact = await dataService.retrieve({ type: "Contact", Id: cr.id, fields: ["firstName", "lastName"] });
         console.log("-- Contact: " + JSON.stringify(contact));
-        
-        const upsertResult = await dataService.upsert(contact);
-        console.log("-- Upsert Result: " + JSON.stringify(upsertResult));
 
-        const contactNameUpdate = { attributes: { type: "Contact"}, Email: "mfisher.au@gmail.com", Phone: "0299992222" };
-        const upsertByNameResult = await dataService.upsert(contactNameUpdate, "Email");
-        console.log("-- Upsert by Name Result: " + JSON.stringify(upsertByNameResult));
+        contact.lastName = "Pants";
+        await dataService.update(contact);
+        console.log("-- Updated Contact");
+        
+        console.log("-- Upsert Test");
+        await dataService.upsert(contact);
+        
+        console.log("-- Upsert By Email Test");
+        const upsertCreateResult = await dataService.upsert({ attributes: { type: "Contact" }, FirstName: "Sunburn", LastName: "Slapper", Email: "mfisher.au@hotmail.com"}, "Email");
+        console.log("-- Upsert By Email New Result: " + JSON.stringify(upsertCreateResult));
+
+        const upsertUpdateResult = await dataService.upsert({ attributes: { type: "Contact" }, FirstName: "Sunburn", LastName: "Fixer", Email: "mfisher.au@hotmail.com" }, "Email");
+        console.log("-- Upsert by Email Update Result: " + JSON.stringify(upsertUpdateResult));
+
+        try {
+            await dataService.delete({ attributes: { type: "Contact" }, Id: upsertCreateResult.id });
+            console.log("-- Deleted");
+        } catch(ex) {
+            console.log("-- Delete error: " + JSON.stringify(ex));
+        }
 
         try {
             await dataService.delete(contact);
