@@ -107,9 +107,7 @@ interface IRetrieveRequest {
     fields: string[];
 }
 
-interface IDataService {
-    versionInfo : Promise<IVersionInfo[]>;
-    latestVersion : Promise<IVersionInfo>;
+interface IDataOperations {
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
@@ -120,6 +118,11 @@ interface IDataService {
     delete(record : IRecord) : Promise<any>;
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult>;
     retrieve(request : IRetrieveRequest) : Promise<IRecord>;
+}
+
+interface IDataService extends IDataOperations {
+    versionInfo : Promise<IVersionInfo[]>;
+    latestVersion : Promise<IVersionInfo>;
 }
 
 class DataService implements IDataService {
