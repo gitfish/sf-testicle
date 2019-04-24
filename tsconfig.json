@@ -9,7 +9,7 @@
         "allowJs": false,
         "experimentalDecorators": true,
         "outDir": "lib",
-        "lib": ["es5", "scripthost", "es2017"]
+        "lib": ["es5", "scripthost", "es2017", "dom"]
     },
     "include": [
         "src/**/*.ts"

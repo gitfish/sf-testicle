@@ -1,5 +1,6 @@
 import { IAccessSupplier, IAccess, DefaultAccessSupplier, createConstantAccessSupplier } from "./auth/core";
-import * as rp from "request-promise-native";
+import "isomorphic-fetch";
+import * as qs from "qs";
 
 interface IDataServiceOptions {
     access?: IAccess;
@@ -95,6 +96,10 @@ interface ISaveResult {
     success: boolean;
 }
 
+interface IUpsertResult {
+    created?: boolean;
+}
+
 interface IRetrieveRequest {
     type: string;
     Id?: string;
@@ -111,9 +116,9 @@ interface IDataService {
     search(sosl : string) : Promise<ISearchResult>;
     parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult>;
     create(record : IRecord) : Promise<ISaveResult>;
-    update(record : IRecord) : Promise<ISaveResult>;
+    update(record : IRecord) : Promise<any>;
     delete(record : IRecord) : Promise<any>;
-    getFieldValues(request : IRetrieveRequest) : Promise<IRecord>;
+    upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult>;
     retrieve(request : IRetrieveRequest) : Promise<IRecord>;
 }
 
@@ -147,33 +152,54 @@ class DataService implements IDataService {
         }
         return this._accessPromise;
     }
-    protected request<T>(opts : any) : Promise<T> {
+    protected _fetch<T>(opts : any) : Promise<T> {
         return this.accessPromise.then(tr => {
-            const uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
+            let uri = opts && opts.uri ? opts.uri : `${tr.instance_url}${opts && opts.path ? opts.path : ""}`;
+            if(opts.qs) {
+                uri += "?" + qs.stringify(opts.qs);
+            }
             const headers = opts && opts.headers ? opts.header : {};
-            headers.Authorization = `Bearer ${tr.access_token}`;
-            delete opts.headers;
-            const req = { ...opts,
-                uri: uri,
-                headers: headers,
-                json: true
+            const fetchHeaders = { "Content-Type": "application/json", ...headers };
+            fetchHeaders.Authorization = `Bearer ${tr.access_token}`;
+            const fetchOptions : any = {
+                headers: fetchHeaders
             };
-            return rp(req).catch(err => {
-                return Promise.reject(err.error ? err.error : err);
+            if(opts.method) {
+                fetchOptions.method = opts.method
+            }
+            if(opts.body) {
+                fetchOptions.body = typeof(opts.body) === "object" ? JSON.stringify(opts.body) : opts.body;
+            } else if(opts.form) {
+                fetchOptions.body = opts.form;
+            }
+            return fetch(uri, fetchOptions).then(response => {
+                if(opts.resolveWithFullResponse) {
+                    return response;
+                }
+                if(response.ok) {
+                    return response.json();
+                }
+                return response.json().then(error => {
+                    throw {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: error
+                    };
+                });
             });
         });
     }
     get<T>(opts : any) : Promise<T> {
-        return this.request({ ...opts, method: "GET" });
+        return this._fetch({ ...opts, method: "GET" });
     }
     post<T>(opts : any) : Promise<T> {
-        return this.request({ ...opts, method: "POST" });
+        return this._fetch({ ...opts, method: "POST" });
     }
     patch<T>(opts : any) : Promise<T> {
-        return this.request({ ...opts, method: "PATCH" });
+        return this._fetch({ ...opts, method: "PATCH" });
     }
     del<T>(opts : any) : Promise<T> {
-        return this.request({ ...opts, method: "DELETE" });
+        return this._fetch({ ...opts, method: "DELETE" });
     }
     get versionInfo() : Promise<IVersionInfo[]> {
         if(!this._versionInfoPromise) {
@@ -266,26 +292,18 @@ class DataService implements IDataService {
     create(record : IRecord) : Promise<ISaveResult> {
         return this.vpost({
             path: `/sobjects/${this.getSObjectType(record)}/`,
-            body: record
+            body: { ...record, attributes: undefined }
         });
     }
-    update(record : IRecord) : Promise<ISaveResult> {
+    update(record : IRecord) : Promise<any> {
         return this.vpatch({
             path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
-            body: record
+            body: { ...record, Id: undefined, attributes: undefined }
         });
     }
     delete(record : IRecord) : Promise<any> {
         return this.vdel({
             path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`
-        });
-    }
-    getFieldValues(request : IRetrieveRequest) : Promise<IRecord> {
-        return this.vget({
-            path: `/sobjects/${request.type}/${request.Id}`,
-            qs: {
-                fields: request.fields.join(",")
-            }
         });
     }
     retrieve(request : IRetrieveRequest) : Promise<IRecord> {
@@ -297,6 +315,49 @@ class DataService implements IDataService {
             qs: {
                 fields: request.fields.join(",")
             }
+        });
+    }
+    upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
+        // TODO
+        const type = this.getSObjectType(record);
+        if(!externalIdField) {
+            if(record.Id) {
+                // update
+                return this.update(record).then(sr => {
+                    return { ...sr, id: record.Id, created: false };
+                });
+            } 
+            // create
+            return this.create(record).then(sr => {
+                return { ...sr, created: true };
+            });
+        }
+        const path = `/sobjects/${type}/${externalIdField}/${record[externalIdField]}`;
+        const body = { ...record, Id: undefined };
+        delete body[externalIdField];
+        return this.vpatch<any>({
+            path: path,
+            body: body,
+            resolveWithFullResponse: true
+        }).then(response => {
+            if(response.ok) {
+                if(response.status === 201) {
+                    return response.json().then(createResult => {
+                        const r = createResult as IUpsertResult;
+                        r.created = true;
+                        return r;
+                    });
+                }
+                return { success: true };
+            }
+            return response.json().then(error => {
+                throw {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: error
+                };
+            });
+            
         });
     }
 }

@@ -86,19 +86,23 @@ const sample = async () => {
             console.log("-- Error Creating empty: " + JSON.stringify(ex));
         }
 
-        const contact = await dataService.retrieve({ type: "Contact", Id: cr.id, fields: ["Name"] });
+        const contact = await dataService.retrieve({ type: "Contact", Id: cr.id, fields: ["firstName", "lastName"] });
         console.log("-- Contact: " + JSON.stringify(contact));
+        
+        const upsertResult = await dataService.upsert(contact);
+        console.log("-- Upsert Result: " + JSON.stringify(upsertResult));
 
-        const contactsResult = await dataService.query(`select Id from Contact where Name = 'Lost Shoes'`);
-        console.log("-- Contacts Result: " + JSON.stringify(contactsResult));
-        if(contactsResult.records && contactsResult.records.length > 0) {
-            try {
-                await dataService.delete(contactsResult.records[0]);
-                console.log("-- Deleted");
-            } catch(ex) {
-                console.log("-- Delete error: " + JSON.stringify(ex));
-            }
+        const contactNameUpdate = { attributes: { type: "Contact"}, Email: "mfisher.au@gmail.com", Phone: "0299992222" };
+        const upsertByNameResult = await dataService.upsert(contactNameUpdate, "Email");
+        console.log("-- Upsert by Name Result: " + JSON.stringify(upsertByNameResult));
+
+        try {
+            await dataService.delete(contact);
+            console.log("-- Deleted");
+        } catch(ex) {
+            console.log("-- Delete error: " + JSON.stringify(ex));
         }
+        
     } catch(ex) {
         console.log("-- Error: " + JSON.stringify(ex));
     }

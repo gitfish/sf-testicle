@@ -1,5 +1,6 @@
 import * as crypto from "crypto";
-import * as rp from "request-promise-native";
+import "isomorphic-fetch";
+import "isomorphic-form-data";
 import * as fs from "fs";
 import { IAccessSupplier, IAccess } from "./core";
 
@@ -54,16 +55,23 @@ const getAccessToken = (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
 
     const jwtAssertion = `${encodedAssertion}.${signedAssertion}`;
 
-    return rp({
+    const formData = new FormData();
+    formData.append("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer");
+    formData.append("assertion", jwtAssertion);
+    return fetch(opts.tokenEndpoint || `${opts.loginUrl}/services/oauth2/token`, {
         method: "POST",
-        uri: opts.tokenEndpoint || `${opts.loginUrl}/services/oauth2/token`,
-        form: {
-            grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            assertion: jwtAssertion
-        },
-        json: true
-    }).then(r => {
-        return r as IAccess;
+        body: formData,
+        redirect: "follow"
+    }).then(response => {
+        if(response.ok) {
+            return response.json();
+        }
+        return Promise.reject({
+            status: response.status,
+            statusText: response.statusText,
+            message: response.statusText,
+            details: response.json()
+        });
     });
 };
 

@@ -10,12 +10,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "request": "^2.88.0",
-    "request-promise-native": "^1.0.7"
+    "isomorphic-fetch": "^2.2.1",
+    "isomorphic-form-data": "^2.0.0",
+    "qs": "^6.7.0"
   },
   "devDependencies": {
     "@types/node": "^11.13.4",
-    "@types/request-promise-native": "^1.0.15",
     "typescript": "^3.4.3"
   }
 }
