@@ -1,4 +1,4 @@
-import { getAccessToken } from "./jwt";
+import { getAccess } from "./jwt";
 
 const privateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAsDRlzSwIY2ppuv2hjXsGWBcCUY27tGk5TKIzNcMs2bk77DP3
@@ -29,7 +29,7 @@ TUYch/WUijOustZjlekf3sFGj56KvUWphcA26BFunFTDlJoW95+m
 -----END RSA PRIVATE KEY-----
 `;
 
-getAccessToken({
+getAccess({
     username: "mfisher@dev.one",
     clientId: "3MVG9pe2TCoA1Pf6I1c1KhtCP9xk.9gbX9NP41gdQDTtVvfUOJPg8P1PnrGJ4wd7y1eAEIin9epeViKJJqXy7",
     privateKey: privateKey

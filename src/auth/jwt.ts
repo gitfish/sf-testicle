@@ -5,18 +5,18 @@ import * as fs from "fs";
 import { IAccessSupplier, IAccess } from "./core";
 import { jsonResponseHandler } from "../common";
 
-interface IAccessTokenRequest {
+interface IAccessRequest {
     loginUrl?: string;
     assertionExpiryInterval?: number;
     username?: string;
     privateKey?: string;
     privateKeyPath?: string;
-    consumerKey?: string;
     clientId?: string;
+    consumerKey?: string;
     tokenEndpoint?: string;
 }
 
-const DefaultBearerAccessTokenRequest : IAccessTokenRequest = {
+const DefaultAccessRequest : IAccessRequest = {
     loginUrl: "https://login.salesforce.com",
     assertionExpiryInterval: 60 * 1000
 };
@@ -30,8 +30,8 @@ const base64Encode = (buf : Buffer) => {
     .replace(/\//g, '_');
 };
 
-const getAccessToken = (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
-    const opts = { ...DefaultBearerAccessTokenRequest, ...rawOpts }; 
+const getAccess = (request : IAccessRequest) : Promise<IAccess> => {
+    const opts = { ...DefaultAccessRequest, ...request }; 
     const now = new Date();
     const expiry = now.getTime() + opts.assertionExpiryInterval;
     const header = { alg: "RS256" };
@@ -66,16 +66,16 @@ const getAccessToken = (rawOpts : IAccessTokenRequest) : Promise<IAccess> => {
     }).then(jsonResponseHandler);
 };
 
-const createAccessSupplier = (opts : IAccessTokenRequest) : IAccessSupplier => {
+const createAccessSupplier = (request : IAccessRequest) : IAccessSupplier => {
     return () => {
-        return getAccessToken(opts);
+        return getAccess(request);
     };
 };
 
 export {
-    getAccessToken,
-    getAccessToken as default,
+    getAccess,
+    getAccess as default,
     createAccessSupplier,
-    IAccessTokenRequest,
-    DefaultBearerAccessTokenRequest
+    IAccessRequest,
+    DefaultAccessRequest
 }
