@@ -2,21 +2,16 @@ import * as crypto from "crypto";
 import "isomorphic-fetch";
 import "isomorphic-form-data";
 import * as fs from "fs";
-import { IAccessSupplier, IAccess } from "./core";
+import { IAccessSupplier, IAccess, IBaseAccessRequest } from "./core";
 import { jsonResponseHandler } from "../common";
 
-interface IAccessRequest {
-    loginUrl?: string;
+interface IJwtAccessRequest extends IBaseAccessRequest {
     assertionExpiryInterval?: number;
-    username?: string;
     privateKey?: string;
     privateKeyPath?: string;
-    clientId?: string;
-    consumerKey?: string;
-    tokenEndpoint?: string;
 }
 
-const DefaultAccessRequest : IAccessRequest = {
+const DefaultAccessRequest : IJwtAccessRequest = {
     loginUrl: "https://login.salesforce.com",
     assertionExpiryInterval: 60 * 1000
 };
@@ -30,13 +25,13 @@ const base64Encode = (buf : Buffer) => {
     .replace(/\//g, '_');
 };
 
-const getAccess = (request : IAccessRequest) : Promise<IAccess> => {
+const getAccess = (request : IJwtAccessRequest) : Promise<IAccess> => {
     const opts = { ...DefaultAccessRequest, ...request }; 
     const now = new Date();
     const expiry = now.getTime() + opts.assertionExpiryInterval;
     const header = { alg: "RS256" };
     const claims = {
-        iss: opts.consumerKey || opts.clientId,
+        iss: opts.clientId,
         sub: opts.username,
         aud: opts.loginUrl,
         exp: expiry
@@ -66,7 +61,7 @@ const getAccess = (request : IAccessRequest) : Promise<IAccess> => {
     }).then(jsonResponseHandler);
 };
 
-const createAccessSupplier = (request : IAccessRequest) : IAccessSupplier => {
+const createAccessSupplier = (request : IJwtAccessRequest) : IAccessSupplier => {
     return () => {
         return getAccess(request);
     };
@@ -76,6 +71,6 @@ export {
     getAccess,
     getAccess as default,
     createAccessSupplier,
-    IAccessRequest,
+    IJwtAccessRequest,
     DefaultAccessRequest
 }

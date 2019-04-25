@@ -1,22 +1,19 @@
-import { IAccessSupplier, IAccess } from "./core";
+import { IAccessSupplier, IAccess, IBaseAccessRequest } from "./core";
 import "isomorphic-fetch";
 import "isomorphic-form-data";
 import { jsonResponseHandler } from "../common";
 
-interface IAccessRequest {
-    loginUrl?: string;
-    clientId?: string;
+interface IPasswordAccessRequest extends IBaseAccessRequest {
     clientSecret?: string;
     username?: string;
     password?: string;
-    tokenEndpoint?: string;
 }
 
-const DefaultAccessRequest : IAccessRequest = {
+const DefaultAccessRequest : IPasswordAccessRequest = {
     loginUrl: "https://login.salesforce.com"
 };
 
-const getAccess = (request : IAccessRequest) : Promise<IAccess> => {
+const getAccess = (request : IPasswordAccessRequest) : Promise<IAccess> => {
     const opts = { ...DefaultAccessRequest, ...request };
     const formData = new FormData();
     formData.append("grant_type", "password");
@@ -31,15 +28,16 @@ const getAccess = (request : IAccessRequest) : Promise<IAccess> => {
     }).then(jsonResponseHandler);
 };
 
-const createAccessSupplier = (request : IAccessRequest) : IAccessSupplier => {
+const createAccessSupplier = (request : IPasswordAccessRequest) : IAccessSupplier => {
     return () => {
         return getAccess(request);
     };
 };
 
 export {
-    IAccessRequest,
-    DefaultAccessRequest,
     getAccess,
+    getAccess as default,
+    IPasswordAccessRequest,
+    DefaultAccessRequest,
     createAccessSupplier
 }

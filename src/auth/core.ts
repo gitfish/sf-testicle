@@ -1,3 +1,10 @@
+interface IBaseAccessRequest {
+    loginUrl?: string;
+    username?: string;
+    clientId?: string;
+    tokenEndpoint?: string;
+}
+
 interface IAccess {
     access_token: string;
     scope?: string;
@@ -23,6 +30,7 @@ const DefaultAccessSupplier : IAccessSupplier = () => {
 };
 
 export {
+    IBaseAccessRequest,
     IAccess,
     IAccessSupplier,
     DefaultAccessSupplier,

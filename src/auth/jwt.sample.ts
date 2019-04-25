@@ -1,38 +1,18 @@
 import { getAccess } from "./jwt";
+import * as program from "commander";
+import { IJwtAccessRequest } from "./jwt";
 
-const privateKey = `-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAsDRlzSwIY2ppuv2hjXsGWBcCUY27tGk5TKIzNcMs2bk77DP3
-itNi52kZb2d3qdNSZC8bGr9fGOGuHMSBpf+2TRgPxKZ+F25PvLnfU3Oh+w5I6vhN
-zsqiIpqlrslRTXV23MZM0MiV50akkGTiOrdo4ATGuKBmY5kOuVZr8V46vA+40dkI
-rsVejYoorpht3V2HPtadQbRj5TstB9caU4PEIlEiC0Y7r9OOS2BCApDv8tykbSPo
-eXpazvUPnGGHxORpznhozY6C4X3LD3nBjhSGwdctXNxml2E2j27WyZqQXhgOdOk8
-b0y272BY8gU6m5sX+UnKot2pDQsX8tSK3M1+JwIDAQABAoIBAFb1VPQ/cdhWUN2m
-hA8FkujwWgWTc/oiH9QRDELREpZUkx0LvHO3xMy9kn7nSif2kWe905uMrErkPYAW
-/oDExNwhLs72961qlFFoTa2qmFsE/rlvVz7hw8heF7w9wDEA8mscNhanl0svEtHr
-57XghBJiaQv+pOksRRb0bosM3OGn8rdMH/dfcbOflM23mGFLBodsDO6KJYrl5X6p
-rIGvLLz9fGQ3XpHJF2DO5Uc2CjBe9MLjDu7SqkDlxuDXGvvYuElOCDYt5nPhSZe6
-KzGbyOVKx1/5xYLtT2HcVZSZgbuPoRPuA5rFp6UVB7dgz1rcV/TTJ60iy14Y6AeP
-95tMgDECgYEA4CQuRGUOjmCIVk1WRQWVeZNvpKxUc4f0XVLtE9IFt+jiUYnD3xEZ
-Wihq6STGTULln5gCQqsP/VH/wtAt/sY4bZaEy8gijzIzXaT1tufeXgSNcyMaxhRH
-9yPXBV8Uwo7tP7jiWbhvtysTUHznq0cn4nl91A/7zCYRx4axZ6PrPFkCgYEAyT/y
-yOH5i5ksZufQIAS0ZsZdVeH6ICXX4JXWgVqryT6147vy4KLAPdtvUa22XJJWWx3v
-vniMDzXtZP9RSiQSwzSZ2fNNkYnapVIbeZ0X7VnyiWQZ7r1xUz8UltASz1QTYazM
-IpNUf7Wi/kZ9sxPNKIZhmmxU6+0TBYaEvPLFPn8CgYEAoOTX4Xi5TjK1K14wgzNS
-7QaMqaSaqqP5IdSZIhUszat6ahV+aO2ZSUKiG+GuB1/x/PHdDYZF4A2wjmNp4Ozh
-LKlTggST6j6a6Km1SCqBUPPrpa6ZVX7RefJcMxrhiBeY7pkEwmrGprFhF/HRSv20
-/7k+Pa+LjCv3r0ZcqozcG2ECgYALebsFW2VYYXaXs5Y5jSsgRSVjVUxm8uF5a/Hc
-VGhBRHMotjnmN0GRBWc2mBoy8yE7dtyJ1uPdpiyQOsLO4Hm1adVwCSCeMOcn0CPC
-7oNDxIJA9VVJOMIyhgFNjDXWXqvwQOMvAYmq8peFuk1GndVv/yGnpY++GDmicgY1
-o/49TwKBgDTnSYCCwQRvVudZujP8gYL8o/jPkuj4wgLm4NSIIkXpYFOrWxTcP3LD
-ykfoJagNArz3HJz7+D7H+SOaLZ9D9SnkwgavrsTAmmvcRAlr94oxF1+AKnol3Uk4
-TUYch/WUijOustZjlekf3sFGj56KvUWphcA26BFunFTDlJoW95+m
------END RSA PRIVATE KEY-----
-`;
+program
+    .option("-u, --username <username>", "Username")
+    .option("-c, --client-id <client id>", "Client id")
+    .option("-k, --private-key-path <private key path>", "Private key path")
+    .parse(process.argv);
 
-getAccess({
-    username: "mfisher@dev.one",
-    clientId: "3MVG9pe2TCoA1Pf6I1c1KhtCP9xk.9gbX9NP41gdQDTtVvfUOJPg8P1PnrGJ4wd7y1eAEIin9epeViKJJqXy7",
-    privateKey: privateKey
-}).then(result => {
+if(!program.username || !program.clientId || !program.privateKeyPath) {
+    program.outputHelp();
+    process.exit(1);
+}
+
+getAccess(program as IJwtAccessRequest).then(result => {
     console.log("-- Result: " + JSON.stringify(result));
 });
