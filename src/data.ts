@@ -2,6 +2,7 @@ import { IAccessSupplier, IAccess } from "./auth/core";
 import "isomorphic-fetch";
 import * as qs from "qs";
 import { jsonResponseHandler, jsonResponseErrorHandler } from "./common";
+import { isFunction } from "util";
 
 interface IApiVersion {
     version?: string;
@@ -107,7 +108,7 @@ interface IRetrieveRequest {
     fields: string[];
 }
 
-interface ISubRequest {
+interface IBatchSubrequest {
     binaryPartName?: string;
     binaryPartNameAlias?: string;
     method?: string;
@@ -116,8 +117,21 @@ interface ISubRequest {
     [key : string] : any;
 }
 
-interface IDataService {
-    getApiVersion() : Promise<IApiVersion>;
+interface IBatchSubrequestResult {
+    result?: any;
+    statusCode?: Number;
+}
+
+interface IBatchRequest {
+    batchRequests?: IBatchSubrequest[];
+}
+
+interface IBatchResponse {
+    hasErrors?: boolean;
+    results?: IBatchSubrequestResult[];
+}
+
+interface IDataOperations {
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
@@ -130,7 +144,172 @@ interface IDataService {
     retrieve(request : IRetrieveRequest) : Promise<IRecord>;
 }
 
-class DataService implements IDataService {
+class BaseDataOperations implements IDataOperations {
+    fetch(opts : any) : Promise<any> {
+        return Promise.reject({
+            code: "NOT_IMPLEMENTED",
+            message: "Fetch has not been implemented"
+        })
+    }
+    get(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "GET" });
+    }
+    post(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "POST" });
+    }
+    patch(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "PATCH" });
+    }
+    del(opts : any) : Promise<any> {
+        return this.fetch({ ...opts, method: "DELETE" });
+    }
+    query(soql : string) : Promise<IQueryResult> {
+        return this.get({
+            path: "/query/",
+            qs: {
+                q: soql
+            }
+        });
+    }
+    explain(soql : string) : Promise<IQueryExplainResult> {
+        return this.get({
+            path: "/query/",
+            qs: {
+                explain: soql
+            }
+        });
+    }
+    queryAll(soql : string) : Promise<IQueryResult> {
+        return this.get({
+            path: "/queryAll/",
+            qs: {
+                q: soql
+            }
+        });
+    }
+    search(sosl : string) : Promise<ISearchResult> {
+        return this.get({
+            path: "/search/",
+            qs: {
+                q: sosl
+            }
+        });
+    }
+    parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult> {
+        return this.post({
+            path: "/parameterizedSearch/",
+            body: request
+        });
+    }
+    getSObjectType(record : IRecord) {
+        const type = record.attributes ? record.attributes.type : undefined;
+        if(!type) {
+            throw { errorCode: "INVALID_ARGUMENT", message: "Unable to resolve record sobject type" };
+        }
+        return type;
+    }
+    create(record : IRecord) : Promise<ISaveResult> {
+        return this.post({
+            path: `/sobjects/${this.getSObjectType(record)}/`,
+            body: { ...record, attributes: undefined }
+        });
+    }
+    update(record : IRecord) : Promise<any> {
+        return this.patch({
+            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
+            body: { ...record, Id: undefined, attributes: undefined },
+            resolveWithFullResponse: true
+        }).then(response => {
+            if(!response.ok) {
+                return jsonResponseErrorHandler(response);
+            }
+        });
+    }
+    delete(record : IRecord) : Promise<any> {
+        return this.del({
+            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
+            resolveWithFullResponse: true
+        });
+    }
+    retrieve(request : IRetrieveRequest) : Promise<IRecord> {
+        const path = request.externalIdField ?
+            `/sobjects/${request.type}/${request.externalIdField}/${request.Id}` :
+            `/sobjects/${request.type}/${request.Id}`;
+        return this.get({
+            path: path,
+            qs: {
+                fields: request.fields.join(",")
+            }
+        });
+    }
+    protected upsertRaw(record : IRecord, externalIdField?: string) : Promise<any> {
+        const type = this.getSObjectType(record);
+        if(!externalIdField) {
+            if(record.Id) {
+                // update
+                return this.update(record).then(sr => {
+                    return { ...sr, id: record.Id, created: false };
+                });
+            } 
+            // create
+            return this.create(record).then(sr => {
+                return { ...sr, created: true };
+            });
+        }
+        const path = `/sobjects/${type}/${externalIdField}/${record[externalIdField]}`;
+        const body = { ...record, Id: undefined };
+        delete body[externalIdField];
+        return this.patch({
+            path: path,
+            body: body,
+            resolveWithFullResponse: true
+        });
+    }
+    upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
+        return this.upsertRaw(record, externalIdField);
+    }
+}
+
+interface IDataOperationsHandler {
+    (ops : IDataOperations) : void;
+}
+
+class BatchRequestBuilder extends BaseDataOperations implements IDataOperations {
+    private subrequests : IBatchSubrequest[] = [];
+    private version : string;
+    constructor(version : string) {
+        super();
+        this.version = version;
+    }
+    fetch(opts : any) : Promise<any> {
+        let url = `v${this.version}${opts.path}`;
+        if(opts.qs) {
+            url += `?${qs.stringify(opts.qs)}`;
+        }
+        const subrequest : IBatchSubrequest = {
+            url: url,
+            method: opts.method ? opts.method : opts.body ? "POST" : "GET",
+            richInput: opts.body
+        };
+        this.subrequests.push(subrequest);
+        return Promise.resolve();
+    }
+    get request() : IBatchRequest {
+        return {
+            batchRequests: this.subrequests.map(r => {
+                return {...r};
+            })
+        };
+    }
+}
+
+interface IDataService extends IDataOperations {
+    getApiVersion() : Promise<IApiVersion>;
+    batch(request : IBatchRequest) : Promise<IBatchResponse>;
+    batchOps(opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }>;
+}
+
+class DataService extends BaseDataOperations implements IDataService {
     private _accessSupplier : IAccessSupplier;
     private _access : IAccess;
     private _accessPromise : Promise<IAccess>;
@@ -139,6 +318,7 @@ class DataService implements IDataService {
     private _apiVersionPromise : Promise<IApiVersion>;
     
     constructor(opts?: IDataServiceOptions) {
+        super();
         this.accessSupplier = opts ? opts.accessSupplier : undefined;
         this.access = opts ? opts.access : undefined;
         this.apiVersion = opts ? opts.apiVersion : undefined;
@@ -216,7 +396,9 @@ class DataService implements IDataService {
         }
         return this._apiVersionPromise;
     }
-    
+    public getApiVersion() : Promise<IApiVersion> {
+        return this.apiVersionPromise;
+    }
     public fetch(opts : any) : Promise<any> {
         return this.accessPromise.then(tr => {
             return this.apiVersionPromise.then(apiVersion => {
@@ -241,125 +423,9 @@ class DataService implements IDataService {
                 return fp;
             });
         });
-
-    }
-    get(opts : any) : Promise<any> {
-        return this.fetch({ ...opts, method: "GET" });
-    }
-    post(opts : any) : Promise<any> {
-        return this.fetch({ ...opts, method: "POST" });
-    }
-    patch(opts : any) : Promise<any> {
-        return this.fetch({ ...opts, method: "PATCH" });
-    }
-    del(opts : any) : Promise<any> {
-        return this.fetch({ ...opts, method: "DELETE" });
-    }
-    getApiVersion() : Promise<IApiVersion> {
-        return this.apiVersionPromise;
-    }
-    query(soql : string) : Promise<IQueryResult> {
-        return this.get({
-            path: "/query/",
-            qs: {
-                q: soql
-            }
-        });
-    }
-    explain(soql : string) : Promise<IQueryExplainResult> {
-        return this.get({
-            path: "/query/",
-            qs: {
-                explain: soql
-            }
-        });
-    }
-    queryAll(soql : string) : Promise<IQueryResult> {
-        return this.get({
-            path: "/queryAll/",
-            qs: {
-                q: soql
-            }
-        });
-    }
-    search(sosl : string) : Promise<ISearchResult> {
-        return this.get({
-            path: "/search/",
-            qs: {
-                q: sosl
-            }
-        });
-    }
-    parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult> {
-        return this.post({
-            path: "/parameterizedSearch/",
-            body: request
-        });
-    }
-    private getSObjectType(record : IRecord) {
-        const type = record.attributes ? record.attributes.type : undefined;
-        if(!type) {
-            throw { errorCode: "INVALID_ARGUMENT", message: "Unable to resolve record sobject type" };
-        }
-        return type;
-    }
-    create(record : IRecord) : Promise<ISaveResult> {
-        return this.post({
-            path: `/sobjects/${this.getSObjectType(record)}/`,
-            body: { ...record, attributes: undefined }
-        });
-    }
-    update(record : IRecord) : Promise<any> {
-        return this.patch({
-            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
-            body: { ...record, Id: undefined, attributes: undefined },
-            resolveWithFullResponse: true
-        }).then(response => {
-            if(!response.ok) {
-                return jsonResponseErrorHandler(response);
-            }
-        });
-    }
-    delete(record : IRecord) : Promise<any> {
-        return this.del({
-            path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
-            resolveWithFullResponse: true
-        });
-    }
-    retrieve(request : IRetrieveRequest) : Promise<IRecord> {
-        const path = request.externalIdField ?
-            `/sobjects/${request.type}/${request.externalIdField}/${request.Id}` :
-            `/sobjects/${request.type}/${request.Id}`;
-        return this.get({
-            path: path,
-            qs: {
-                fields: request.fields.join(",")
-            }
-        });
     }
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
-        // TODO
-        const type = this.getSObjectType(record);
-        if(!externalIdField) {
-            if(record.Id) {
-                // update
-                return this.update(record).then(sr => {
-                    return { ...sr, id: record.Id, created: false };
-                });
-            } 
-            // create
-            return this.create(record).then(sr => {
-                return { ...sr, created: true };
-            });
-        }
-        const path = `/sobjects/${type}/${externalIdField}/${record[externalIdField]}`;
-        const body = { ...record, Id: undefined };
-        delete body[externalIdField];
-        return this.patch({
-            path: path,
-            body: body,
-            resolveWithFullResponse: true
-        }).then(response => {
+        return this.upsertRaw(record, externalIdField).then(response => {
             if(response.ok) {
                 if(response.status === 201) {
                     return response.json().then(createResult => {
@@ -368,14 +434,35 @@ class DataService implements IDataService {
                         return r;
                     });
                 }
-                return { success: true };
+                return { success: true, created: false };
             }
             return jsonResponseErrorHandler(response);
         });
     }
+    batch(request : IBatchRequest) : Promise<IBatchResponse> {
+        return this.post({
+            path: "/composite/batch",
+            body: request
+        });
+    }
+    batchOps(opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }> {
+        return this.apiVersionPromise.then(apiVersion => {
+            const b = new BatchRequestBuilder(apiVersion.version);
+            opsHandler(b);
+            const request = b.request;
+            return this.batch(request).then(response => {
+                return {
+                    request: request,
+                    response: response
+                };
+            });
+        });
+        
+    }
 }
 
 export {
+    IDataOperations,
     IDataService,
     DataService,
     IDataServiceOptions,
@@ -390,6 +477,7 @@ export {
     IQueryExplainResult,
     ISearchSObjectSpec,
     IParameterizedSearchRequest,
-    ISearchResult
+    ISearchResult,
+    BatchRequestBuilder
 }
 
