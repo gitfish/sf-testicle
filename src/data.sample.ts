@@ -88,7 +88,13 @@ const sample = async () => {
         console.log("-- Updated Contact");
         
         console.log("-- Upsert Test");
-        await dataService.upsert(contact);
+        try {
+            const upsertResult = await dataService.upsert(contact);
+            console.log(`-- Upsert Result: ${JSON.stringify(upsertResult)}`);
+        } catch(ex) {
+            console.log("-- Upsert Error: " + ex);
+            console.error(ex);
+        }
         
         console.log("-- Upsert By Email Test");
         const upsertCreateResult = await dataService.upsert({ attributes: { type: "Contact" }, FirstName: "Sunburn", LastName: "Slapper", Email: "mfisher.au@hotmail.com"}, "Email");
@@ -101,18 +107,21 @@ const sample = async () => {
             await dataService.delete({ attributes: { type: "Contact" }, Id: upsertCreateResult.id });
             console.log("-- Deleted");
         } catch(ex) {
-            console.log("-- Delete error: " + JSON.stringify(ex));
+            console.log("-- Delete error: " + ex);
+            console.error(ex);
         }
 
         try {
             await dataService.delete(contact);
             console.log("-- Deleted");
         } catch(ex) {
-            console.log("-- Delete error: " + JSON.stringify(ex));
+            console.log("-- Delete error: " + ex);
+            console.error(ex);
         }
         
     } catch(ex) {
-        console.log("-- Error: " + JSON.stringify(ex));
+        console.log("-- Error: " + ex);
+        console.error(ex);
     }
 };
 

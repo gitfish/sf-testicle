@@ -11,9 +11,16 @@ const jsonResponseErrorHandler = (response) => {
     });
 };
 
-const jsonResponseHandler = (response) => {
+const jsonResponseHandler = (response : Response) => {
     if(response.ok) {
         return response.json();
+    }
+    return jsonResponseErrorHandler(response);
+};
+
+const blobResponseHandler = (response : Response) => {
+    if(response.ok) {
+        return response.blob();
     }
     return jsonResponseErrorHandler(response);
 };
@@ -169,6 +176,7 @@ class RestService {
 export {
     jsonResponseErrorHandler,
     jsonResponseHandler,
+    blobResponseHandler,
     IApiVersion,
     IRestServiceConfig,
     RestServiceDefaults,

@@ -1,5 +1,5 @@
 import "isomorphic-fetch";
-import { jsonResponseErrorHandler, IApiVersion, IRestServiceConfig } from "./common";
+import { jsonResponseErrorHandler, IApiVersion, IRestServiceConfig, blobResponseHandler } from "./common";
 import * as qs from "qs";
 import { RestService } from "./common";
 
@@ -138,7 +138,105 @@ interface ILimitsResponse {
     [key : string] : ILimit;
 }
 
-interface ISObjectBasicInformation {
+interface IPicklistEntry {
+    active?: boolean;
+    defaultValue?: boolean;
+    label?: string;
+    validFor?: string;
+    value?: string;
+}
+
+interface IFilteredLookupInfo {
+    controllingFields?: string[];
+    dependent?: boolean;
+    optionalFilter?: boolean;
+}
+
+enum FieldType {
+    string = "string",
+    boolean = "boolean",
+    int = "int",
+    double = "double",
+    date = "date",
+    datetime = "datetime",
+    base64 = "base64",
+    ID = "ID",
+    reference = "reference",
+    currency = "currency",
+    textarea = "textarea",
+    percent = "percent",
+    phone = "phone",
+    url = "url",
+    email = "email",
+    combobox = "combobox",
+    picklist = "picklist",
+    multipicklist = "multipicklist",
+    anyType = "anyType",
+    location = "location"
+};
+
+interface IField {
+    aggregatable?: boolean;
+    aiPredicationField?: boolean;
+    autoNumber?: boolean;
+    byteLength?: number;
+    calculated?: boolean;
+    calculatedFormula?: string;
+    cascadeDelete?: boolean;
+    caseSensitive?: boolean;
+    compoundFieldName?: string;
+    controllerName?: string;
+    createable?: boolean;
+    custom?: boolean;
+    defaultValue?: any;
+    defaultValueFormula?: string;
+    defaultedOnCreate?: boolean;
+    dependentPicklist?: boolean;
+    deprecatedAndHidden?: boolean;
+    digits?: number;
+    displayLocationInDecimal?: boolean;
+    encrypted?: boolean;
+    externalId?: boolean;
+    extraTypeInfo?: string;
+    filterable?: boolean;
+    filteredLookupInfo?: IFilteredLookupInfo;
+    formula?: string;
+    formulaTreatNullNumberAsZero?: boolean;
+    groupable?: boolean;
+    highScaleNumber?: boolean;
+    htmlFormatted?: boolean;
+    idLookup?: boolean;
+    inlineHelpText?: string;
+    label?: string;
+    length?: number;
+    mask?: string;
+    maskType?: string;
+    name?: string;
+    nameField?: boolean;
+    namePointing?: boolean;
+    nillable?: boolean;
+    permissionable?: boolean;
+    picklistValues?: IPicklistEntry[];
+    polymorphicForeignKey?: boolean;
+    precision?: number;
+    queryByDistance?: boolean;
+    referenceTargetField?: boolean;
+    referenceTo?: string[];
+    relationshipName?: string;
+    relationshipOrder?: number;
+    restrictedDelete?: boolean;
+    restrictedPicklist?: boolean;
+    scale?: number;
+    searchPrefilterable?: boolean;
+    soapType?: string;
+    sortable?: boolean;
+    type?: FieldType;
+    unique?: boolean;
+    updateable?: boolean;
+    writeRequiresMasterRead?: boolean;
+}
+
+interface IDescribeGlobalSObjectResult {
     activateable?: boolean;
     custom?: boolean;
     customSetting?: boolean;
@@ -165,19 +263,70 @@ interface ISObjectBasicInformation {
     };
 }
 
-interface IGlobalSObjectDescribeResult {
+interface IDescribeGlobalResult {
     encoding?: string;
     maxBatchSize?: number;
-    sobjects: ISObjectBasicInformation[];
+    sobjects: IDescribeGlobalSObjectResult[];
 }
 
-interface ISObjectDescribeBasicResult {
-    objectDescribe?: ISObjectBasicInformation;
+interface IDescribeSObjectBasicResult {
+    objectDescribe?: IDescribeGlobalSObjectResult;
     recentItems?: IRecord[];
 }
 
-interface ISObjectDescribeResult extends ISObjectBasicInformation {
-    [key : string] : any;
+interface IActionOverride {
+    formFactor?: string;
+    isAvailableInTouch?: boolean;
+    name?: string;
+    pageId?: string;
+    url?: string;
+}
+
+interface IChildRelationship {
+    cascadeDelete?: boolean;
+    childSObject?: string;
+    deprecatedAndHidden?: boolean;
+    field?: string;
+    relationshipName?: string;
+}
+
+interface INamedLayoutInfo {
+    name?: string;
+}
+
+interface IScopeInfo {
+    label?: string;
+    name?: string;
+}
+
+interface IRecordTypeInfo {
+    available?: boolean;
+    defaultRecordTypeMapping?: boolean;
+    developerName?: string;
+    master?: boolean;
+    name?: string;
+    recordTypeId?: string;
+}
+
+interface ISObjectDescribeResult extends IDescribeGlobalSObjectResult {
+    actionOverrides?: IActionOverride[];
+    childRelationships?: IChildRelationship[];
+    compactLayoutable?: boolean;
+    fields?: IField[];
+    namedLayoutInfos?: INamedLayoutInfo[];
+    networkScopeFieldName?: string;
+    recordTypeInfos?: IRecordTypeInfo[];
+    searchLayoutable?: boolean;
+    supportedScopes?: IScopeInfo[];
+    urlDetail?: string;
+    urlEdit?: string;
+    urlNew?: string;
+}
+
+interface IRetrieveBlobRequest {
+    type: string;
+    Id: string;
+    blobField: string;
 }
 
 const getRequestDate = (value : string | Date) : string => {
@@ -197,8 +346,8 @@ const getRequestDate = (value : string | Date) : string => {
 
 interface IDataOperations {
     getLimits() : Promise<ILimitsResponse>;
-    describeGlobal() : Promise<IGlobalSObjectDescribeResult>;
-    describeBasic(type : string) : Promise<ISObjectDescribeBasicResult>;
+    describeGlobal() : Promise<IDescribeGlobalResult>;
+    describeBasic(type : string) : Promise<IDescribeSObjectBasicResult>;
     describe(type : string) : Promise<ISObjectDescribeResult>;
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
@@ -238,7 +387,7 @@ class BaseDataOperations implements IDataOperations {
             path: "/sobjects/"
         });
     }
-    describeBasic(type : string) : Promise<ISObjectDescribeBasicResult> {
+    describeBasic(type : string) : Promise<IDescribeSObjectBasicResult> {
         return this.get({
             path: `/sobjects/${type}/`
         });
@@ -332,38 +481,27 @@ class BaseDataOperations implements IDataOperations {
             }
         });
     }
-    protected upsertRaw(record : IRecord, externalIdField?: string) : Promise<any> {
+    upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
         const type = this.getSObjectType(record);
         if(!externalIdField) {
             if(record.Id) {
                 // update
-                return this.update(record).then(sr => {
-                    return { ...sr, id: record.Id, created: false };
-                });
+                return this.update(record);
             } 
             // create
-            return this.create(record).then(sr => {
-                return { ...sr, created: true };
-            });
+            return this.create(record);
         }
         const path = `/sobjects/${type}/${externalIdField}/${record[externalIdField]}`;
         const body = { ...record, Id: undefined };
         delete body[externalIdField];
         return this.patch({
             path: path,
-            body: body,
-            resolveWithFullResponse: true
+            body: body
         });
-    }
-    upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
-        return this.upsertRaw(record, externalIdField);
     }
     getDeleted(request : IGetDeletedRequest) : Promise<IGetDeletedResponse> {
         const start = getRequestDate(request.start);
         const end = getRequestDate(request.end);
-        
-        console.log("-- Start Date: " + start);
-        console.log("-- End Date: " + end);
         return this.get({
             path: `/sobjects/${request.type}/deleted/`,
             qs: {
@@ -381,6 +519,11 @@ class BaseDataOperations implements IDataOperations {
                 start: start,
                 end: end
             }
+        });
+    }
+    retrieveBlob(request : IRetrieveBlobRequest) : Promise<Blob> {
+        return this.get({
+            path: `/sobjects/${request.type}/${request.Id}/${request.blobField}`
         });
     }
 }
@@ -418,8 +561,6 @@ class BatchRequestBuilder extends BaseDataOperations implements IDataOperations 
     }
 }
 
-
-
 interface IDataService extends IDataOperations {
     getApiVersion() : Promise<IApiVersion>;
     batch(request : IBatchRequest) : Promise<IBatchResponse>;
@@ -439,7 +580,27 @@ class RestDataService extends BaseDataOperations implements IDataService {
         return this.rest.fetch(opts);
     }
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
-        return this.upsertRaw(record, externalIdField).then(response => {
+        const type = this.getSObjectType(record);
+        if(!externalIdField) {
+            if(record.Id) {
+                // update
+                return this.update(record).then(sr => {
+                    return { ...sr, id: record.Id, created: false };
+                });
+            } 
+            // create
+            return this.create(record).then(sr => {
+                return { ...sr, created: true };
+            });
+        }
+        const path = `/sobjects/${type}/${externalIdField}/${record[externalIdField]}`;
+        const body = { ...record, Id: undefined };
+        delete body[externalIdField];
+        return this.patch({
+            path: path,
+            body: body,
+            resolveWithFullResponse: true
+        }).then(response => {
             if(response.ok) {
                 if(response.status === 201) {
                     return response.json().then(createResult => {
@@ -458,6 +619,12 @@ class RestDataService extends BaseDataOperations implements IDataService {
             path: "/composite/batch",
             body: request
         });
+    }
+    retrieveBlob(request) : Promise<Blob> {
+        return this.get({
+            path: `/sobjects/${request.type}/${request.Id}/${request.blobField}`,
+            resolveWithFullResponse: true
+        }).then(blobResponseHandler);
     }
 }
 
@@ -490,6 +657,14 @@ export {
     IParameterizedSearchRequest,
     ISearchResult,
     BatchRequestBuilder,
-    batchOps
+    batchOps,
+    IDescribeGlobalResult,
+    IDescribeSObjectBasicResult,
+    ISObjectDescribeResult,
+    IField,
+    FieldType,
+    IPicklistEntry,
+    IScopeInfo,
+    IChildRelationship
 }
 
