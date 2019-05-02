@@ -109,7 +109,7 @@ interface IBatchResponse {
 interface IGetDeletedRequest {
     type: string;
     start?: string | Date;
-    end?: string | Date;
+    end: string | Date;
 }
 
 interface IGetDeletedResponse {
@@ -121,7 +121,7 @@ interface IGetDeletedResponse {
 interface IGetUpdatedRequest {
     type: string;
     start?: string | Date;
-    end?: string | Date;
+    end: string | Date;
 }
 
 interface IGetUpdatedResponse {
@@ -179,6 +179,21 @@ interface ISObjectDescribeBasicResult {
 interface ISObjectDescribeResult extends ISObjectBasicInformation {
     [key : string] : any;
 }
+
+const getRequestDate = (value : string | Date) : string => {
+    if(value) {
+        if(typeof(value) !== "string") {
+            let r = value.toISOString();
+            const dotIndex = r.lastIndexOf(".");
+            if(dotIndex > 0) {
+                r = r.substring(0, dotIndex) + r.substring(dotIndex + 4);
+            }
+            return r;
+        }
+        return value as string;
+    }
+    return undefined;
+};
 
 interface IDataOperations {
     getLimits() : Promise<ILimitsResponse>;
@@ -344,8 +359,11 @@ class BaseDataOperations implements IDataOperations {
         return this.upsertRaw(record, externalIdField);
     }
     getDeleted(request : IGetDeletedRequest) : Promise<IGetDeletedResponse> {
-        const start = request.start ? typeof(request.start) === "string" ? request.start : request.start.toISOString() : undefined;
-        const end = request.end ? typeof(request.end) === "string" ? request.end : request.end.toISOString() : undefined;
+        const start = getRequestDate(request.start);
+        const end = getRequestDate(request.end);
+        
+        console.log("-- Start Date: " + start);
+        console.log("-- End Date: " + end);
         return this.get({
             path: `/sobjects/${request.type}/deleted/`,
             qs: {
@@ -355,8 +373,8 @@ class BaseDataOperations implements IDataOperations {
         });
     }
     getUpdated(request : IGetUpdatedRequest) : Promise<IGetUpdatedResponse> {
-        const start = request.start ? typeof(request.start) === "string" ? request.start : request.start.toISOString() : undefined;
-        const end = request.end ? typeof(request.end) === "string" ? request.end : request.end.toISOString() : undefined;
+        const start = getRequestDate(request.start);
+        const end = getRequestDate(request.end);
         return this.get({
             path: `/sobjects/${request.type}/updated/`,
             qs: {

@@ -24,6 +24,20 @@ const sample = async () => {
     const accountDescribe = await dataService.describe("Account");
     console.log(`-- Account Describe Result: ${JSON.stringify(accountDescribe, null, "\t")}`);
 
+    const endDate = new Date();
+    endDate.setDate(endDate.getDay() - 1);
+
+    const startDate = new Date(endDate.getTime());
+    startDate.setDate(startDate.getDate() - 25);
+
+    try {
+        const deleted = await dataService.getDeleted({ type: "Contact", start: startDate, end: endDate });
+        console.log(`-- Deleted: ${JSON.stringify(deleted)}`);
+    } catch(error) {
+        console.log("-- Error: " + error);
+        console.error(error);
+    }
+
     const qr = await dataService.query("select Id,Name from User");
     console.log("-- Query Result: " + JSON.stringify(qr));
 

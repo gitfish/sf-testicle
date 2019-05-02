@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "clean": "del-cli lib --force && del-cli lib-es --force",
+    "build": "tsc && tsc -p tsconfig.es.json",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -15,9 +16,9 @@
     "qs": "^6.7.0"
   },
   "devDependencies": {
-    "@types/commander": "^2.12.2",
     "@types/node": "^11.13.4",
     "commander": "^2.20.0",
-    "typescript": "^3.4.3"
+    "typescript": "^3.4.3",
+    "del-cli": "^1.1.0"
   }
 }
