@@ -1,10 +1,10 @@
 import { createAccessSupplier, IJwtAccessRequest } from "./auth/jwt";
-import { DataService } from "./data";
+import { RestDataService } from "./data";
 import { program } from "./auth/jwt.sample.program";
 
 const accessSupplier = createAccessSupplier(program as IJwtAccessRequest);
 
-const dataService = new DataService({
+const dataService = new RestDataService({
     accessSupplier: accessSupplier
 });
 

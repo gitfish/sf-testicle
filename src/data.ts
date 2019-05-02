@@ -1,32 +1,7 @@
-import { IAccessSupplier, IAccess } from "./auth/core";
 import "isomorphic-fetch";
+import { jsonResponseErrorHandler, IApiVersion, IRestServiceConfig } from "./common";
 import * as qs from "qs";
-import { jsonResponseHandler, jsonResponseErrorHandler } from "./common";
-import { isFunction } from "util";
-
-interface IApiVersion {
-    version?: string;
-    label?: string;
-    url?: string;
-}
-
-interface IConfig {
-    apiVersion : IApiVersion;
-}
-
-const Defaults : IConfig = {
-    apiVersion: {
-        label: "Spring '19",
-        url: "/services/data/v45.0",
-        version: "45.0"
-    }
-};
-
-interface IDataServiceOptions {
-    access?: IAccess;
-    accessSupplier?: IAccessSupplier;
-    apiVersion?: IApiVersion;
-}
+import { RestService } from "./common";
 
 interface IRecordAttributes {
     type?: string;
@@ -131,7 +106,62 @@ interface IBatchResponse {
     results?: IBatchSubrequestResult[];
 }
 
+interface ILimit {
+    Max: number;
+    Remaining: number;
+}
+
+interface ILimitsResponse {
+    [key : string] : ILimit;
+}
+
+interface ISObjectBasicInformation {
+    activateable?: boolean;
+    custom?: boolean;
+    customSetting?: boolean;
+    createable?: boolean;
+    deletable?: boolean;
+    deprecatedAndHidden?: boolean;
+    feedEnabled?: boolean;
+    keyPrefix?: string;
+    label?: string;
+    labelPlural?: string;
+    layoutable?: boolean;
+    mergeable?: boolean;
+    mruEnabled?: boolean;
+    name?: string;
+    queryable?: boolean;
+    replicateable?: boolean;
+    retrieveable?: boolean;
+    searchable?: boolean;
+    triggerable?: boolean;
+    undeletable?: boolean;
+    updateable?: boolean;
+    urls?: {
+        [key : string] : string;
+    };
+}
+
+interface IGlobalSObjectDescribeResult {
+    encoding?: string;
+    maxBatchSize?: number;
+    sobjects: ISObjectBasicInformation[];
+}
+
+interface ISObjectDescribeBasicResult {
+    objectDescribe?: ISObjectBasicInformation;
+    recentItems?: IRecord[];
+}
+
+interface ISObjectDescribeResult extends ISObjectBasicInformation {
+    [key : string] : any;
+}
+
 interface IDataOperations {
+    getLimits() : Promise<ILimitsResponse>;
+    describeGlobal() : Promise<IGlobalSObjectDescribeResult>;
+    describeBasic(type : string) : Promise<ISObjectDescribeBasicResult>;
+    describe(type : string) : Promise<ISObjectDescribeResult>;
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
@@ -162,6 +192,26 @@ class BaseDataOperations implements IDataOperations {
     }
     del(opts : any) : Promise<any> {
         return this.fetch({ ...opts, method: "DELETE" });
+    }
+    describeGlobal() {
+        return this.get({
+            path: "/sobjects/"
+        });
+    }
+    describeBasic(type : string) : Promise<ISObjectDescribeResult> {
+        return this.get({
+            path: `/sobjects/${type}/`
+        });
+    }
+    describe(type : string) : Promise<ISObjectDescribeResult> {
+        return this.get({
+            path: `/sobjects/${type}/describe/`
+        });
+    }
+    getLimits() {
+        return this.get({
+            path: "/limits/"
+        });
     }
     query(soql : string) : Promise<IQueryResult> {
         return this.get({
@@ -303,126 +353,27 @@ class BatchRequestBuilder extends BaseDataOperations implements IDataOperations 
     }
 }
 
+
+
 interface IDataService extends IDataOperations {
+
     getApiVersion() : Promise<IApiVersion>;
     batch(request : IBatchRequest) : Promise<IBatchResponse>;
     batchOps(opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }>;
 }
 
-class DataService extends BaseDataOperations implements IDataService {
-    private _accessSupplier : IAccessSupplier;
-    private _access : IAccess;
-    private _accessPromise : Promise<IAccess>;
-    private _apiVersion : IApiVersion;
-    private _apiVersionsPromise : Promise<IApiVersion[]>;
-    private _apiVersionPromise : Promise<IApiVersion>;
+class RestDataService extends BaseDataOperations implements IDataService {
+    private rest : RestService;
     
-    constructor(opts?: IDataServiceOptions) {
+    constructor(opts?: IRestServiceConfig) {
         super();
-        this.accessSupplier = opts ? opts.accessSupplier : undefined;
-        this.access = opts ? opts.access : undefined;
-        this.apiVersion = opts ? opts.apiVersion : undefined;
-    }
-    get accessSupplier() {
-        return this._accessSupplier;
-    }
-    set accessSupplier(accessSupplier : IAccessSupplier) {
-        if(accessSupplier !== this._accessSupplier) {
-            delete this._accessPromise;
-            delete this._apiVersionsPromise;
-            delete this._apiVersionPromise;
-            this._accessSupplier = accessSupplier;
-        }
-    }
-    get access() {
-        return this._access;
-    }
-    set access(value : IAccess) {
-        if(value !== this._access) {
-            this._access = value;
-            delete this._accessPromise;
-        }
-    }
-    get apiVersion() {
-        return this._apiVersion;
-    }
-    set apiVersion(value) {
-        if(value !== this._apiVersion) {
-            this._apiVersion = value;
-            delete this._apiVersionPromise;
-        }
-    }
-    protected get accessPromise() : Promise<IAccess> {
-        if(!this._accessPromise) {
-            if(this.access) {
-                this._accessPromise = Promise.resolve(this._access);
-            } else if(this.accessSupplier) {
-                this._accessPromise = Promise.resolve(this.accessSupplier());
-            } else {
-                this._accessPromise = Promise.reject({ code: "ILLEGAL_STATE", message: "Access or Access Supplier has not been configured" });
-            }
-        }
-        return this._accessPromise;
-    }
-    protected get apiVersionsPromise() : Promise<IApiVersion[]> {
-        if(!this._apiVersionsPromise) {
-            this._apiVersionsPromise = this.accessPromise.then(tr => {
-                return fetch(`${tr.instance_url}/services/data/`, {
-                    headers: {
-                        Authorization: `Bearer ${tr.access_token}`
-                    }
-                }).then(jsonResponseHandler);
-            });
-        }
-        return this._apiVersionsPromise;
-    }
-    protected get apiVersionPromise() : Promise<IApiVersion> {
-        if(!this._apiVersionPromise) {
-            if(this.apiVersion) {
-                this._apiVersionPromise = Promise.resolve(this.apiVersion);
-            } else {
-                this._apiVersionPromise = this.apiVersionsPromise.then(versions => {
-                    if(versions && versions.length > 0) {
-                        return versions.reduce((pv, cv) => {
-                            if(pv && cv) {
-                                return parseFloat(cv.version) > parseFloat(pv.version) ? cv : pv;
-                            }
-                            return cv;
-                        });
-                    }
-                    return Defaults.apiVersion;
-                });
-            }
-        }
-        return this._apiVersionPromise;
+        this.rest = new RestService(opts);
     }
     public getApiVersion() : Promise<IApiVersion> {
-        return this.apiVersionPromise;
+        return this.rest.getApiVersion();
     }
     public fetch(opts : any) : Promise<any> {
-        return this.accessPromise.then(tr => {
-            return this.apiVersionPromise.then(apiVersion => {
-                let url = `${tr.instance_url}${apiVersion.url}${opts.path}`;
-                if(opts.qs) {
-                    url += `?${qs.stringify(opts.qs)}`;
-                }
-                const headers = {
-                    Authorization: `Bearer ${tr.access_token}`
-                };
-                headers["Content-Type"] = opts.body ? "application/json" : undefined;
-
-                const fetchOpts = {
-                    method: opts.method ? opts.method : opts.body || opts.form ? "POST" : "GET",
-                    headers: headers,
-                    body: opts.form ? opts.form : opts.body ? JSON.stringify(opts.body) : undefined
-                };
-                let fp = fetch(url, fetchOpts);
-                if(!opts.resolveWithFullResponse) {
-                    fp = fp.then(jsonResponseHandler);
-                }
-                return fp;
-            });
-        });
+        return this.rest.fetch(opts);
     }
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
         return this.upsertRaw(record, externalIdField).then(response => {
@@ -446,7 +397,7 @@ class DataService extends BaseDataOperations implements IDataService {
         });
     }
     batchOps(opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }> {
-        return this.apiVersionPromise.then(apiVersion => {
+        return this.getApiVersion().then(apiVersion => {
             const b = new BatchRequestBuilder(apiVersion.version);
             opsHandler(b);
             const request = b.request;
@@ -464,10 +415,7 @@ class DataService extends BaseDataOperations implements IDataService {
 export {
     IDataOperations,
     IDataService,
-    DataService,
-    IDataServiceOptions,
-    IConfig,
-    Defaults,
+    RestDataService,
     IApiVersion,
     IRecordAttributes,
     IRecord,

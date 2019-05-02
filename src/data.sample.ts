@@ -1,16 +1,28 @@
 import { createAccessSupplier, IJwtAccessRequest } from "./auth/jwt";
-import { DataService } from "./data";
+import { RestDataService } from "./data";
 import { program } from "./auth/jwt.sample.program";
 
 const accessSupplier = createAccessSupplier(program as IJwtAccessRequest);
 
-const dataService = new DataService({
+const dataService = new RestDataService({
     accessSupplier: accessSupplier
 });
 
 const sample = async () => {
     const apiVersion = await dataService.getApiVersion();
     console.log("-- Version Info: " + JSON.stringify(apiVersion));
+
+    const limits = await dataService.getLimits();
+    console.log(`-- Limits: ${JSON.stringify(limits)}`);
+
+    const gd = await dataService.describeGlobal();
+    console.log(`-- Global Describe Result: ${JSON.stringify(gd, null, "\t")}`);
+
+    const accountBasicDescribe = await dataService.describeBasic("Account");
+    console.log(`-- Account Basic Describe Result: ${JSON.stringify(accountBasicDescribe, null, "\t")}`);
+
+    const accountDescribe = await dataService.describe("Account");
+    console.log(`-- Account Describe Result: ${JSON.stringify(accountDescribe, null, "\t")}`);
 
     const qr = await dataService.query("select Id,Name from User");
     console.log("-- Query Result: " + JSON.stringify(qr));
