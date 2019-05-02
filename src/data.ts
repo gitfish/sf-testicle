@@ -106,6 +106,29 @@ interface IBatchResponse {
     results?: IBatchSubrequestResult[];
 }
 
+interface IGetDeletedRequest {
+    type: string;
+    start?: string | Date;
+    end?: string | Date;
+}
+
+interface IGetDeletedResponse {
+    deletedRecords?: IRecord[];
+    earliestDateAvailable?: string;
+    latestDateCovered?: string;
+}
+
+interface IGetUpdatedRequest {
+    type: string;
+    start?: string | Date;
+    end?: string | Date;
+}
+
+interface IGetUpdatedResponse {
+    ids?: string[];
+    latestDateCovered?: string;
+}
+
 interface ILimit {
     Max: number;
     Remaining: number;
@@ -172,6 +195,8 @@ interface IDataOperations {
     delete(record : IRecord) : Promise<any>;
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult>;
     retrieve(request : IRetrieveRequest) : Promise<IRecord>;
+    getDeleted(request : IGetDeletedRequest) : Promise<IGetDeletedResponse>;
+    getUpdated(request : IGetUpdatedRequest) : Promise<IGetUpdatedResponse>;
 }
 
 class BaseDataOperations implements IDataOperations {
@@ -198,7 +223,7 @@ class BaseDataOperations implements IDataOperations {
             path: "/sobjects/"
         });
     }
-    describeBasic(type : string) : Promise<ISObjectDescribeResult> {
+    describeBasic(type : string) : Promise<ISObjectDescribeBasicResult> {
         return this.get({
             path: `/sobjects/${type}/`
         });
@@ -318,6 +343,28 @@ class BaseDataOperations implements IDataOperations {
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
         return this.upsertRaw(record, externalIdField);
     }
+    getDeleted(request : IGetDeletedRequest) : Promise<IGetDeletedResponse> {
+        const start = request.start ? typeof(request.start) === "string" ? request.start : request.start.toISOString() : undefined;
+        const end = request.end ? typeof(request.end) === "string" ? request.end : request.end.toISOString() : undefined;
+        return this.get({
+            path: `/sobjects/${request.type}/deleted/`,
+            qs: {
+                start: start,
+                end: end
+            }
+        });
+    }
+    getUpdated(request : IGetUpdatedRequest) : Promise<IGetUpdatedResponse> {
+        const start = request.start ? typeof(request.start) === "string" ? request.start : request.start.toISOString() : undefined;
+        const end = request.end ? typeof(request.end) === "string" ? request.end : request.end.toISOString() : undefined;
+        return this.get({
+            path: `/sobjects/${request.type}/updated/`,
+            qs: {
+                start: start,
+                end: end
+            }
+        });
+    }
 }
 
 interface IDataOperationsHandler {
@@ -356,10 +403,8 @@ class BatchRequestBuilder extends BaseDataOperations implements IDataOperations 
 
 
 interface IDataService extends IDataOperations {
-
     getApiVersion() : Promise<IApiVersion>;
     batch(request : IBatchRequest) : Promise<IBatchResponse>;
-    batchOps(opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }>;
 }
 
 class RestDataService extends BaseDataOperations implements IDataService {
@@ -396,20 +441,20 @@ class RestDataService extends BaseDataOperations implements IDataService {
             body: request
         });
     }
-    batchOps(opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }> {
-        return this.getApiVersion().then(apiVersion => {
-            const b = new BatchRequestBuilder(apiVersion.version);
-            opsHandler(b);
-            const request = b.request;
-            return this.batch(request).then(response => {
-                return {
-                    request: request,
-                    response: response
-                };
-            });
+}
+
+const batchOps = (dataService : IDataService, opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }> => {
+    return dataService.getApiVersion().then(apiVersion => {
+        const b = new BatchRequestBuilder(apiVersion.version);
+        opsHandler(b);
+        const request = b.request;
+        return dataService.batch(request).then(response => {
+            return {
+                request: request,
+                response: response
+            };
         });
-        
-    }
+    });
 }
 
 export {
@@ -426,6 +471,7 @@ export {
     ISearchSObjectSpec,
     IParameterizedSearchRequest,
     ISearchResult,
-    BatchRequestBuilder
+    BatchRequestBuilder,
+    batchOps
 }
 

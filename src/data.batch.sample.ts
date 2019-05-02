@@ -1,5 +1,5 @@
 import { createAccessSupplier, IJwtAccessRequest } from "./auth/jwt";
-import { RestDataService } from "./data";
+import { RestDataService, batchOps } from "./data";
 import { program } from "./auth/jwt.sample.program";
 
 const accessSupplier = createAccessSupplier(program as IJwtAccessRequest);
@@ -9,9 +9,8 @@ const dataService = new RestDataService({
 });
 
 const sample = async () => {
-
     try {
-        const result = await dataService.batchOps(ops => {
+        const result = await batchOps(dataService, ops => {
             ops.create({
                 attributes: {
                     type: "Contact"
