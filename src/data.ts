@@ -329,6 +329,256 @@ interface IRetrieveBlobRequest {
     blobField: string;
 }
 
+enum LayoutComponentType {
+    AnalyticsCloud = "AnalyticsCloud",
+    Canvas = "Canvas",
+    CustomLink = "CustomLink",
+    EmptySpace = "EmptySpace",
+    ExpandedLookup = "ExpandedLookup",
+    Field = "Field",
+    ReportChart = "ReportChart",
+    SControl = "SControl",
+    Separator = "Separator",
+    VisualForcePage = "VisualForcePage"
+}
+
+interface IDescribeLayoutComponent {
+    displayLines?: number;
+    tabOrder?: number;
+    type?: LayoutComponentType;
+    value?: string;
+}
+
+interface IDescribeLayoutItem {
+    editable?: boolean;
+    editableForNew?: boolean;
+    editableForUpdate?: boolean;
+    label?: string;
+    layoutComponent?: IDescribeLayoutComponent[];
+    placeholder?: boolean;
+    required?: boolean;
+}
+
+interface IDescribeApprovalLayout {
+    id?: string;
+    label?: string;
+    layoutItems?: IDescribeLayoutItem[];
+    name?: string;
+}
+
+interface IDescribeApprovalLayoutResult {
+    approvalLayouts?: IDescribeApprovalLayout[];
+}
+
+enum WebLinkWindowType {
+    newWindow = "newWindow",
+    noSidebar = "noSidebar",
+    onClickJavaScript = "onClickJavaScript",
+    replace = "replace",
+    sidebar = "sidebar"
+}
+
+interface IDescribeColor {
+    color?: string;
+    context?: string;
+    theme?: string;
+}
+
+enum WebLinkType {
+    javascript = "javascript",
+    page = "page",
+    sControl = "sControl",
+    url = "url"
+};
+
+interface IDescribeIcon {
+    contentType?: string;
+    height?: number;
+    theme?: string;
+    url?: string;
+    width?: number;
+}
+
+enum WebLinkPosition {
+    fullScreen = "fullScreen",
+    none = "none",
+    topLeft = "topLeft"
+}
+
+interface IDescribeLayoutButton {
+    behavior?: WebLinkWindowType;
+    colors?: IDescribeColor[];
+    content?: string;
+    contentSource?: WebLinkType;
+    custom?: boolean;
+    encoding?: string;
+    height?: number;
+    icons?: IDescribeIcon[];
+    label?: string;
+    menubar?: boolean;
+    name?: string;
+    overridden?: boolean;
+    resizeable?: boolean;
+    scrollbars?: boolean;
+    showsLocation?: boolean;
+    showsStatus?: boolean;
+    toolbar?: boolean;
+    url?: string;
+    width?: number;
+    windowPosition?: WebLinkPosition;
+}
+
+interface IDescribeCompactLayout {
+    actions?: IDescribeLayoutButton[];
+    fieldItems?: IDescribeLayoutItem[];
+    id?: string;
+    imageItems?: IDescribeLayoutItem[];
+    label?: string;
+    name?: string;
+    objectType?: string;
+}
+
+interface IRecordTypeCompactLayoutMapping {
+    available?: boolean;
+    compactLayoutId?: string;
+    compactLayoutName?: string;
+    recordTypeName?: string;
+    recordTypeId?: string;
+}
+
+interface IDescribeCompactLayoutsResult {
+    compactLayouts?: IDescribeCompactLayout[];
+    defaultCompactLayoutId?: string;
+    recordTypeCompactLayoutMappings?: IRecordTypeCompactLayoutMapping[];
+}
+
+enum FeedLayoutFilterType {
+    AllUpdates = "AllUpdates",
+    FeedItemType = "FeedItemType"
+}
+
+interface IDescribeLayoutFeedFilter {
+    label?: string;
+    name?: string;
+    type?: FeedLayoutFilterType;
+}
+
+interface IDescribeLayoutFeedView {
+    feedFilters?: IDescribeLayoutFeedFilter[];
+}
+
+interface IDescribeButtonLayoutSection {
+    detailButtons?: IDescribeLayoutButton[];
+}
+
+interface IDescribeLayoutRow {
+    layoutItems?: IDescribeLayoutItem[];
+    numItems?: number;
+}
+
+interface IDescribeLayoutSection {
+    columns?: number;
+    heading?: string;
+    layoutRows?: IDescribeLayoutRow[];
+    parentLayoutId?: string;
+    rows?: number;
+    tabOrder?: string;
+    useCollapsibleSection?: boolean;
+    useHeading?: boolean;
+}
+
+interface IDescribeQuickActionListItemResult {
+    colors?: IDescribeColor[];
+    iconUrl?: string;
+    icons?: IDescribeIcon[];
+    label?: string;
+    miniIconUrl?: string;
+    quickActionName?: string;
+    targetSobjectType?: string;
+    type?: string;
+}
+
+interface IDescribeQuickActionListResult {
+    quickActionListItems?: IDescribeQuickActionListItemResult[];
+}
+
+interface IDescribeRelatedContentItem {
+    describeLayoutItem?: IDescribeLayoutItem;
+}
+
+interface IRelatedContent {
+    relatedContentItems?: IDescribeRelatedContentItem[];
+}
+
+interface IRelatedListColumn {
+    field?: string;
+    fieldApiName?: string;
+    format?: string;
+    label?: string;
+    lookupId?: string;
+    name?: string;
+}
+
+interface IRelatedListSort {
+    column?: string;
+    ascending?: boolean;
+}
+
+interface IRelatedList {
+    buttons?: IDescribeLayoutButton[];
+    columns?: IRelatedListColumn[];
+    custom?: boolean;
+    field?: string;
+    label?: string;
+    limitRows?: number;
+    name?: string;
+    sobject?: string;
+    sort?: IRelatedListSort[];
+}
+
+interface IDescribeLayoutSaveOption {
+    defaultValue?: boolean;
+    isDisplayed?: boolean;
+    label?: string;
+    name?: string;
+    restHeaderName?: string;
+    soapHeaderName?: string;
+}
+
+interface IDescribeLayout {
+    buttonLayoutSection?: IDescribeButtonLayoutSection;
+    detailLayoutSections?: IDescribeLayoutSection[];
+    editLayoutSections?: IDescribeLayoutSection[];
+    highlightsPanelLayoutSection?: IDescribeLayoutSection[];
+    multirowEditLayoutSections?: IDescribeLayoutSection[];
+    id?: string;
+    quickActionList?: IDescribeQuickActionListResult;
+    relatedContent?: IRelatedContent;
+    relatedLists?: IRelatedList[];
+    saveOptions?: IDescribeLayoutSaveOption[];
+}
+
+interface IPicklistForRecordType {
+    picklistName?: string;
+    picklistValues?: IPicklistEntry[];
+}
+
+interface IRecordTypeMapping {
+    available?: boolean;
+    defaultRecordTypeMapping?: boolean;
+    layoutId?: string;
+    name?: string;
+    picklistsForRecordType?: IPicklistForRecordType[];
+    recordTypeId?: string;
+}
+
+interface IDescribeLayoutResult {
+    feedView?: IDescribeLayoutFeedView[];
+    layouts?: IDescribeLayout[];
+    recordTypeMappings?: IRecordTypeMapping[];
+    recordTypeSelectorRequired?: boolean[];
+}
+
 const getRequestDate = (value : string | Date) : string => {
     if(value) {
         if(typeof(value) !== "string") {
@@ -349,6 +599,10 @@ interface IDataOperations {
     describeGlobal() : Promise<IDescribeGlobalResult>;
     describeBasic(type : string) : Promise<IDescribeSObjectBasicResult>;
     describe(type : string) : Promise<ISObjectDescribeResult>;
+    describeApprovalLayouts(type : string) : Promise<IDescribeApprovalLayoutResult>;
+    describeCompactLayouts(type : string) : Promise<IDescribeCompactLayoutsResult>;
+    describeLayout(type : string) : Promise<IDescribeLayoutResult>;
+    describePublisherLayouts() : Promise<IDescribeLayoutResult>;
     query(soql : string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
     queryAll(soql : string) : Promise<IQueryResult>;
@@ -395,6 +649,26 @@ class BaseDataOperations implements IDataOperations {
     describe(type : string) : Promise<ISObjectDescribeResult> {
         return this.get({
             path: `/sobjects/${type}/describe/`
+        });
+    }
+    describeApprovalLayouts(type : string) : Promise<IDescribeApprovalLayoutResult> {
+        return this.get({
+            path: `/sobjects/${type}/describe/approvalLayouts/`
+        });
+    }
+    describeCompactLayouts(type : string) : Promise<IDescribeCompactLayoutsResult> {
+        return this.get({
+            path: `/sobjects/${type}/describe/compactLayouts/`
+        });
+    }
+    describeLayout(type : string) : Promise<IDescribeLayoutResult> {
+        return this.get({
+            path: `/sobjects/${type}/describe/layouts/`
+        })
+    }
+    describePublisherLayouts() : Promise<any> {
+        return this.get({
+            path: "/sobjects/Global/describe/layouts/"
         });
     }
     getLimits() {

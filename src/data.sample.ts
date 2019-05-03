@@ -9,7 +9,8 @@ const dataService = new RestDataService({
 });
 
 const sample = async () => {
-    const apiVersion = await dataService.getApiVersion();
+    try {
+        const apiVersion = await dataService.getApiVersion();
     console.log("-- Version Info: " + JSON.stringify(apiVersion));
 
     const limits = await dataService.getLimits();
@@ -67,8 +68,6 @@ const sample = async () => {
     });
     console.log("-- Parameterized Search Result: " + JSON.stringify(psr));
 
-
-    try {
         const cr = await dataService.create({ attributes: { type: "Contact" }, firstName: "Lost", lastName: "Shoes", email: "mfisher.au@gmail.com" });
         console.log(`-- Create Result: ${JSON.stringify(cr)}`);
     
@@ -118,6 +117,15 @@ const sample = async () => {
             console.log("-- Delete error: " + ex);
             console.error(ex);
         }
+
+        const accountLayout = await dataService.describeLayout("Account");
+        console.log("-- Acount Layouts: " + JSON.stringify(accountLayout));
+
+        console.log("-- Type: " + typeof(accountLayout));
+
+        const publisherLayouts = await dataService.describePublisherLayouts();
+
+        console.log(`-- Publisher Layouts: ${JSON.stringify(publisherLayouts, null, "\t")}`);
         
     } catch(ex) {
         console.log("-- Error: " + ex);
