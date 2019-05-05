@@ -1,4 +1,4 @@
-import { IAccessSupplier, IAccess } from "./auth/core";
+import { ISession, IAccess, IUserInfo } from "./auth/core";
 import * as qs from "qs";
 
 const jsonResponseErrorHandler = (response) => {
@@ -32,8 +32,7 @@ interface IApiVersion {
 }
 
 interface IRestServiceConfig {
-    access?: IAccess;
-    accessSupplier?: IAccessSupplier;
+    session?: ISession;
     apiVersion?: IApiVersion;
 }
 
@@ -45,38 +44,37 @@ const RestServiceDefaults : IRestServiceConfig = {
     }
 };
 
-class RestService {
-    private _accessSupplier : IAccessSupplier;
-    private _access : IAccess;
-    private _accessPromise : Promise<IAccess>;
+class RestService implements ISession {
+    private _session : ISession;
     private _apiVersion : IApiVersion;
     private _apiVersionsPromise : Promise<IApiVersion[]>;
     private _apiVersionPromise : Promise<IApiVersion>;
     
     constructor(opts?: IRestServiceConfig) {
-        this.accessSupplier = opts ? opts.accessSupplier : undefined;
-        this.access = opts ? opts.access : undefined;
+        this._session = opts ? opts.session : undefined;
         this.apiVersion = opts ? opts.apiVersion : undefined;
     }
-    get accessSupplier() {
-        return this._accessSupplier;
+    get session() {
+        return this._session;
     }
-    set accessSupplier(accessSupplier : IAccessSupplier) {
-        if(accessSupplier !== this._accessSupplier) {
-            delete this._accessPromise;
+    set session(value) {
+        if(value !== this._session) {
+            this._session = value;
             delete this._apiVersionsPromise;
             delete this._apiVersionPromise;
-            this._accessSupplier = accessSupplier;
         }
     }
-    get access() {
-        return this._access;
+    getAccess() : Promise<IAccess> {
+        return this.session ? this.session.getAccess() : Promise.reject({
+            code: "INVALID_STATE",
+            message: "A session has not been configured"
+        });
     }
-    set access(value : IAccess) {
-        if(value !== this._access) {
-            this._access = value;
-            delete this._accessPromise;
-        }
+    getUserInfo() : Promise<IUserInfo> {
+        return this.session ? this.session.getUserInfo() : Promise.reject({
+            code: "INVALID_STATE",
+            message: "A session has not been configured"
+        });
     }
     get apiVersion() {
         return this._apiVersion;
@@ -87,21 +85,9 @@ class RestService {
             delete this._apiVersionPromise;
         }
     }
-    get accessPromise() : Promise<IAccess> {
-        if(!this._accessPromise) {
-            if(this.access) {
-                this._accessPromise = Promise.resolve(this._access);
-            } else if(this.accessSupplier) {
-                this._accessPromise = Promise.resolve(this.accessSupplier());
-            } else {
-                this._accessPromise = Promise.reject({ code: "ILLEGAL_STATE", message: "Access or Access Supplier has not been configured" });
-            }
-        }
-        return this._accessPromise;
-    }
     get apiVersionsPromise() : Promise<IApiVersion[]> {
         if(!this._apiVersionsPromise) {
-            this._apiVersionsPromise = this.accessPromise.then(tr => {
+            this._apiVersionsPromise = this.getAccess().then(tr => {
                 return fetch(`${tr.instance_url}/services/data/`, {
                     headers: {
                         Authorization: `Bearer ${tr.access_token}`
@@ -135,7 +121,7 @@ class RestService {
         return this.apiVersionPromise;
     }
     public fetch(opts : any) : Promise<any> {
-        return this.accessPromise.then(tr => {
+        return this.session.getAccess().then(tr => {
             return this.apiVersionPromise.then(apiVersion => {
                 let url = `${tr.instance_url}${apiVersion.url}${opts.path}`;
                 if(opts.qs) {

@@ -1,20 +1,19 @@
-import { IAccessSupplier, IAccess, IBaseAccessRequest } from "./core";
+import { IAccess, ISession, AbstractRestSession, ISessionOptions } from "./core";
 import "isomorphic-fetch";
 import "isomorphic-form-data";
 import { jsonResponseHandler } from "../common";
 
-interface IPasswordAccessRequest extends IBaseAccessRequest {
+interface IPasswordSessionOptions extends ISessionOptions {
     clientSecret?: string;
     username?: string;
     password?: string;
 }
 
-const DefaultAccessRequest : IPasswordAccessRequest = {
+const DefaultPasswordSessionOptions : IPasswordSessionOptions = {
     loginUrl: "https://login.salesforce.com"
 };
 
-const getAccess = (request : IPasswordAccessRequest) : Promise<IAccess> => {
-    const opts = { ...DefaultAccessRequest, ...request };
+const createAccess = (opts : IPasswordSessionOptions) : Promise<IAccess> => {
     const formData = new FormData();
     formData.append("grant_type", "password");
     formData.append("client_id", opts.clientId);
@@ -28,16 +27,32 @@ const getAccess = (request : IPasswordAccessRequest) : Promise<IAccess> => {
     }).then(jsonResponseHandler);
 };
 
-const createAccessSupplier = (request : IPasswordAccessRequest) : IAccessSupplier => {
-    return () => {
-        return getAccess(request);
-    };
+class PasswordSession extends AbstractRestSession {
+    private _opts : IPasswordSessionOptions;
+    private _accessPromise : Promise<IAccess>;
+    constructor(opts : IPasswordSessionOptions) {
+        super();
+        this._opts = { ...DefaultPasswordSessionOptions, ...opts };
+    }
+    get loginUrl() {
+        return this._opts.loginUrl;
+    }
+    getAccess() : Promise<IAccess> {
+        if(!this._accessPromise) {
+            this._accessPromise = createAccess(this._opts);
+        }
+        return this._accessPromise;
+    }
+}
+
+const createSession = (opts : IPasswordSessionOptions) : ISession => {
+    return new PasswordSession(opts);
 };
 
 export {
-    getAccess,
-    getAccess as default,
-    IPasswordAccessRequest,
-    DefaultAccessRequest,
-    createAccessSupplier
+    createAccess,
+    IPasswordSessionOptions,
+    PasswordSession,
+    createSession,
+    DefaultPasswordSessionOptions
 }

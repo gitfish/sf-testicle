@@ -2,16 +2,16 @@ import * as crypto from "crypto";
 import "isomorphic-fetch";
 import "isomorphic-form-data";
 import * as fs from "fs";
-import { IAccessSupplier, IAccess, IBaseAccessRequest } from "./core";
+import { IAccess, ISessionOptions, ISession, AbstractRestSession } from "./core";
 import { jsonResponseHandler } from "../common";
 
-interface IJwtAccessRequest extends IBaseAccessRequest {
+interface IJwtSessionOptions extends ISessionOptions {
     assertionExpiryInterval?: number;
     privateKey?: string;
     privateKeyPath?: string;
 }
 
-const DefaultAccessRequest : IJwtAccessRequest = {
+const DefaultJwtSessionOptions : IJwtSessionOptions = {
     loginUrl: "https://login.salesforce.com",
     assertionExpiryInterval: 60 * 1000
 };
@@ -25,8 +25,7 @@ const base64Encode = (buf : Buffer) => {
     .replace(/\//g, '_');
 };
 
-const getAccess = (request : IJwtAccessRequest) : Promise<IAccess> => {
-    const opts = { ...DefaultAccessRequest, ...request }; 
+const createAccess = (opts : IJwtSessionOptions) : Promise<IAccess> => {
     const now = new Date();
     const expiry = now.getTime() + opts.assertionExpiryInterval;
     const header = { alg: "RS256" };
@@ -61,16 +60,32 @@ const getAccess = (request : IJwtAccessRequest) : Promise<IAccess> => {
     }).then(jsonResponseHandler);
 };
 
-const createAccessSupplier = (request : IJwtAccessRequest) : IAccessSupplier => {
-    return () => {
-        return getAccess(request);
-    };
+class JwtSession extends AbstractRestSession {
+    private _opts : IJwtSessionOptions;
+    private _accessPromise : Promise<IAccess>;
+    constructor(opts : IJwtSessionOptions) {
+        super();
+        this._opts = { ...DefaultJwtSessionOptions, ...opts };
+    }
+    get loginUrl() {
+        return this._opts.loginUrl;
+    }
+    getAccess() : Promise<IAccess> {
+        if(!this._accessPromise) {
+            this._accessPromise = createAccess(this._opts);
+        }
+        return this._accessPromise;
+    }
+}
+
+const createSession = (opts : ISessionOptions) : ISession => {
+    return new JwtSession(opts);
 };
 
 export {
-    getAccess,
-    getAccess as default,
-    createAccessSupplier,
-    IJwtAccessRequest,
-    DefaultAccessRequest
+    createAccess,
+    IJwtSessionOptions,
+    JwtSession,
+    createSession,
+    DefaultJwtSessionOptions
 }

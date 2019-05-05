@@ -1,11 +1,11 @@
-import { createAccessSupplier, IJwtAccessRequest } from "./auth/jwt";
+import { createSession, IJwtSessionOptions } from "./auth/jwt";
 import { RestDataService, batchOps } from "./data";
 import { program } from "./auth/jwt.sample.program";
 
-const accessSupplier = createAccessSupplier(program as IJwtAccessRequest);
+const session = createSession(program as IJwtSessionOptions);
 
 const dataService = new RestDataService({
-    accessSupplier: accessSupplier
+    session: session
 });
 
 const sample = async () => {

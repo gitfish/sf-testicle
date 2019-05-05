@@ -2,6 +2,7 @@ import "isomorphic-fetch";
 import { jsonResponseErrorHandler, IApiVersion, IRestServiceConfig, blobResponseHandler } from "./common";
 import * as qs from "qs";
 import { RestService } from "./common";
+import { IAccess, ISession, IUserInfo } from "./auth/core";
 
 interface IRecordAttributes {
     type?: string;
@@ -615,6 +616,7 @@ interface IDataOperations {
     retrieve(request : IRetrieveRequest) : Promise<IRecord>;
     getDeleted(request : IGetDeletedRequest) : Promise<IGetDeletedResponse>;
     getUpdated(request : IGetUpdatedRequest) : Promise<IGetUpdatedResponse>;
+    getRecentlyViewed(limit?: number) : Promise<IRecord[]>;
 }
 
 class BaseDataOperations implements IDataOperations {
@@ -800,6 +802,15 @@ class BaseDataOperations implements IDataOperations {
             path: `/sobjects/${request.type}/${request.Id}/${request.blobField}`
         });
     }
+    getRecentlyViewed(limit?: number) : Promise<IRecord[]> {
+        const opts : any = {
+            path: "/recent/"
+        };
+        if(limit > 0) {
+            opts.qs = { limit: limit };
+        }
+        return this.get(opts);
+    }
 }
 
 interface IDataOperationsHandler {
@@ -840,17 +851,23 @@ interface IDataService extends IDataOperations {
     batch(request : IBatchRequest) : Promise<IBatchResponse>;
 }
 
-class RestDataService extends BaseDataOperations implements IDataService {
+class RestDataService extends BaseDataOperations implements IDataService, ISession {
     private rest : RestService;
     
     constructor(opts?: IRestServiceConfig) {
         super();
         this.rest = new RestService(opts);
     }
-    public getApiVersion() : Promise<IApiVersion> {
+    getAccess() : Promise<IAccess> {
+        return this.rest.getAccess();
+    }
+    getUserInfo() : Promise<IUserInfo> {
+        return this.rest.getUserInfo();
+    }
+    getApiVersion() : Promise<IApiVersion> {
         return this.rest.getApiVersion();
     }
-    public fetch(opts : any) : Promise<any> {
+    fetch(opts : any) : Promise<any> {
         return this.rest.fetch(opts);
     }
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {

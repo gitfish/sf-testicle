@@ -1,72 +1,78 @@
-import { createAccessSupplier, IJwtAccessRequest } from "./auth/jwt";
+import { createSession, IJwtSessionOptions } from "./auth/jwt";
 import { RestDataService } from "./data";
 import { program } from "./auth/jwt.sample.program";
 
-const accessSupplier = createAccessSupplier(program as IJwtAccessRequest);
+const session = createSession(program as IJwtSessionOptions);
 
 const dataService = new RestDataService({
-    accessSupplier: accessSupplier
+    session: session
 });
 
 const sample = async () => {
     try {
+        const userInfo = await dataService.getUserInfo();
+        console.log("-- User Info: " + JSON.stringify(userInfo));
+
         const apiVersion = await dataService.getApiVersion();
-    console.log("-- Version Info: " + JSON.stringify(apiVersion));
+        console.log("-- Version Info: " + JSON.stringify(apiVersion));
 
-    const limits = await dataService.getLimits();
-    console.log(`-- Limits: ${JSON.stringify(limits)}`);
+        const limits = await dataService.getLimits();
+        console.log(`-- Limits: ${JSON.stringify(limits)}`);
 
-    const gd = await dataService.describeGlobal();
-    console.log(`-- Global Describe Result: ${JSON.stringify(gd, null, "\t")}`);
+        const gd = await dataService.describeGlobal();
+        console.log(`-- Global Describe Result: ${JSON.stringify(gd, null, "\t")}`);
 
-    const accountBasicDescribe = await dataService.describeBasic("Account");
-    console.log(`-- Account Basic Describe Result: ${JSON.stringify(accountBasicDescribe, null, "\t")}`);
+        const accountBasicDescribe = await dataService.describeBasic("Account");
+        console.log(`-- Account Basic Describe Result: ${JSON.stringify(accountBasicDescribe, null, "\t")}`);
 
-    const accountDescribe = await dataService.describe("Account");
-    console.log(`-- Account Describe Result: ${JSON.stringify(accountDescribe, null, "\t")}`);
+        const accountDescribe = await dataService.describe("Account");
+        console.log(`-- Account Describe Result: ${JSON.stringify(accountDescribe, null, "\t")}`);
 
-    const endDate = new Date();
-    endDate.setDate(endDate.getDay() - 1);
+        const dayMillis = 1000 * 60 * 60 * 24;
 
-    const startDate = new Date(endDate.getTime());
-    startDate.setDate(startDate.getDate() - 25);
+        const currentDate = new Date();
+        const endDate = new Date(currentDate.getTime() - dayMillis);
+        const startDate = new Date(currentDate.getTime() - (20 * dayMillis));
 
-    try {
-        const deleted = await dataService.getDeleted({ type: "Contact", start: startDate, end: endDate });
-        console.log(`-- Deleted: ${JSON.stringify(deleted)}`);
-    } catch(error) {
-        console.log("-- Error: " + error);
-        console.error(error);
-    }
+        console.log("-- Start Date: " + startDate);
+        console.log("-- End Date: " + endDate);
 
-    const qr = await dataService.query("select Id,Name from User");
-    console.log("-- Query Result: " + JSON.stringify(qr));
+        try {
+            const deleted = await dataService.getDeleted({ type: "Contact", start: startDate, end: endDate });
+            console.log(`-- Deleted: ${JSON.stringify(deleted)}`);
+        } catch(error) {
+            console.log("-- Error: " + error);
+            console.error(error);
+        }
 
-    const er = await dataService.explain("select Id,Name from User");
-    console.log("-- Explain Result: " + JSON.stringify(er));
+        const qr = await dataService.query("select Id,Name from User");
+        console.log("-- Query Result: " + JSON.stringify(qr));
 
-    const qar = await dataService.queryAll("select Id,Name from User");
-    console.log("-- Query All Result: " + JSON.stringify(qar));
+        const er = await dataService.explain("select Id,Name from User");
+        console.log("-- Explain Result: " + JSON.stringify(er));
 
-    const accounts = await dataService.query("select Id,Name,(select Id,Name from Contacts) from Account");
-    console.log("-- Accounts: " + JSON.stringify(accounts));
+        const qar = await dataService.queryAll("select Id,Name from User");
+        console.log("-- Query All Result: " + JSON.stringify(qar));
 
-    const sr = await dataService.search('FIND {trail*} IN ALL FIELDS returning Contact(Id,Name)');
-    console.log("-- Search Result: " + JSON.stringify(sr));
+        const accounts = await dataService.query("select Id,Name,(select Id,Name from Contacts) from Account");
+        console.log("-- Accounts: " + JSON.stringify(accounts));
 
-    const psr = await dataService.parameterizedSearch({
-        q: "trail*",
-        fields: ["id", "firstName", "lastName"],
-        sobjects: [
-            {
-                name: "Contact"
-            }
-        ],
-        in: "ALL",
-        overallLimit: 100,
-        defaultLimit: 10
-    });
-    console.log("-- Parameterized Search Result: " + JSON.stringify(psr));
+        const sr = await dataService.search('FIND {trail*} IN ALL FIELDS returning Contact(Id,Name)');
+        console.log("-- Search Result: " + JSON.stringify(sr));
+
+        const psr = await dataService.parameterizedSearch({
+            q: "trail*",
+            fields: ["id", "firstName", "lastName"],
+            sobjects: [
+                {
+                    name: "Contact"
+                }
+            ],
+            in: "ALL",
+            overallLimit: 100,
+            defaultLimit: 10
+        });
+        console.log("-- Parameterized Search Result: " + JSON.stringify(psr));
 
         const cr = await dataService.create({ attributes: { type: "Contact" }, firstName: "Lost", lastName: "Shoes", email: "mfisher.au@gmail.com" });
         console.log(`-- Create Result: ${JSON.stringify(cr)}`);
@@ -126,7 +132,11 @@ const sample = async () => {
         const publisherLayouts = await dataService.describePublisherLayouts();
 
         console.log(`-- Publisher Layouts: ${JSON.stringify(publisherLayouts, null, "\t")}`);
-        
+
+        const recentlyViewed = await dataService.getRecentlyViewed(10);
+
+        console.log("-- Recently Viewed: " + JSON.stringify(recentlyViewed, null, "\t"));
+
     } catch(ex) {
         console.log("-- Error: " + ex);
         console.error(ex);
