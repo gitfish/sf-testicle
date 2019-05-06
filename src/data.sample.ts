@@ -137,6 +137,9 @@ const sample = async () => {
 
         console.log("-- Recently Viewed: " + JSON.stringify(recentlyViewed, null, "\t"));
 
+        const appMenu = await dataService.describeSwitcherAppMenu();
+
+        console.log(`-- App Menu: ${JSON.stringify(appMenu)}`);
     } catch(ex) {
         console.log("-- Error: " + ex);
         console.error(ex);

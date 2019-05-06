@@ -580,6 +580,34 @@ interface IDescribeLayoutResult {
     recordTypeSelectorRequired?: boolean[];
 }
 
+interface IUserRequest {
+    userId?: string;
+}
+
+interface INewPassword {
+    NewPassword?: string;
+}
+
+interface IUserPasswordUpdateRequest extends IUserRequest, INewPassword {}
+
+interface IPasswordStatus {
+    isExpired?: boolean;
+}
+
+interface IDescribeAppMenuItem {
+    colors?: IDescribeColor[];
+    content?: string;
+    icons?: IDescribeIcon[];
+    label?: string;
+    name?: string;
+    type?: string;
+    url?: string;
+}
+
+interface IDescribeAppMenuResult {
+    appMenuItems?: IDescribeAppMenuItem[];
+}
+
 const getRequestDate = (value : string | Date) : string => {
     if(value) {
         if(typeof(value) !== "string") {
@@ -617,6 +645,12 @@ interface IDataOperations {
     getDeleted(request : IGetDeletedRequest) : Promise<IGetDeletedResponse>;
     getUpdated(request : IGetUpdatedRequest) : Promise<IGetUpdatedResponse>;
     getRecentlyViewed(limit?: number) : Promise<IRecord[]>;
+    getPasswordStatus(request : IUserRequest) : Promise<IPasswordStatus>;
+    updatePassword(request : IUserPasswordUpdateRequest) : Promise<any>;
+    resetPassword(request : IUserRequest) : Promise<INewPassword>;
+    describeAppMenu() : Promise<IDescribeAppMenuResult>;
+    describeSwitcherAppMenu() : Promise<IDescribeAppMenuResult>;
+    describeMobileAppMenu() : Promise<IDescribeAppMenuResult>;
 }
 
 class BaseDataOperations implements IDataOperations {
@@ -811,6 +845,39 @@ class BaseDataOperations implements IDataOperations {
         }
         return this.get(opts);
     }
+    getPasswordStatus(request : IUserRequest) : Promise<IPasswordStatus> {
+        return this.get({
+            path: `/sobjects/User/${request.userId}/password`
+        });
+    }
+    updatePassword(request : IUserPasswordUpdateRequest) : Promise<any> {
+        return this.post({
+            path: `/sobjects/User/${request.userId}/password`,
+            body: {
+                NewPassword: request.NewPassword
+            }
+        });
+    }
+    resetPassword(request : IUserRequest) : Promise<INewPassword> {
+        return this.del({
+            path: `/sobjects/User/${request.userId}/password`
+        });
+    }
+    describeAppMenu() : Promise<IDescribeAppMenuResult> {
+        return this.get({
+            path: "/appMenu/"
+        });
+    }
+    describeSwitcherAppMenu() : Promise<IDescribeAppMenuResult> {
+        return this.get({
+            path: "/appMenu/AppSwitcher/"
+        });
+    }
+    describeMobileAppMenu() : Promise<IDescribeAppMenuResult> {
+        return this.get({
+            path: "/appMenu/Salesforce1/"
+        });
+    }
 }
 
 interface IDataOperationsHandler {
@@ -956,6 +1023,9 @@ export {
     FieldType,
     IPicklistEntry,
     IScopeInfo,
-    IChildRelationship
+    IChildRelationship,
+    IUserRequest,
+    IUserPasswordUpdateRequest,
+    INewPassword
 }
 
