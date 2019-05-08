@@ -1,5 +1,5 @@
 import "isomorphic-fetch";
-import { jsonResponseErrorHandler, IApiVersion, IRestServiceConfig, blobResponseHandler } from "./common";
+import { IApiVersion, IRestServiceConfig, blobResponseHandler, responseErrorHandler } from "./common";
 import * as qs from "qs";
 import { RestService } from "./common";
 import { IAccess, ISession, IUserInfo } from "./auth/core";
@@ -768,10 +768,6 @@ class BaseDataOperations implements IDataOperations {
             path: `/sobjects/${this.getSObjectType(record)}/${record.Id}`,
             body: { ...record, Id: undefined, attributes: undefined },
             resolveWithFullResponse: true
-        }).then(response => {
-            if(!response.ok) {
-                return jsonResponseErrorHandler(response);
-            }
         });
     }
     delete(record : IRecord) : Promise<any> {
@@ -913,12 +909,13 @@ class BatchRequestBuilder extends BaseDataOperations implements IDataOperations 
     }
 }
 
-interface IDataService extends IDataOperations {
+interface IDataService extends IDataOperations, ISession {
     getApiVersion() : Promise<IApiVersion>;
+    queryNext(nextRequest : string | IQueryResult) : Promise<IQueryResult>;
     batch(request : IBatchRequest) : Promise<IBatchResponse>;
 }
 
-class RestDataService extends BaseDataOperations implements IDataService, ISession {
+class RestDataService extends BaseDataOperations implements IDataService {
     private rest : RestService;
     
     constructor(opts?: IRestServiceConfig) {
@@ -936,6 +933,10 @@ class RestDataService extends BaseDataOperations implements IDataService, ISessi
     }
     fetch(opts : any) : Promise<any> {
         return this.rest.fetch(opts);
+    }
+    queryNext(nextRequest : string | IQueryResult) : Promise<IQueryResult> {
+        const url = typeof(nextRequest) === "string" ? nextRequest : (nextRequest as IQueryResult).nextRecordsUrl;
+        return this.rest.get({ url: url });
     }
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
         const type = this.getSObjectType(record);
@@ -969,7 +970,7 @@ class RestDataService extends BaseDataOperations implements IDataService, ISessi
                 }
                 return { success: true, created: false };
             }
-            return jsonResponseErrorHandler(response);
+            return responseErrorHandler(response);
         });
     }
     batch(request : IBatchRequest) : Promise<IBatchResponse> {
@@ -986,17 +987,44 @@ class RestDataService extends BaseDataOperations implements IDataService, ISessi
     }
 }
 
-const batchOps = (dataService : IDataService, opsHandler : IDataOperationsHandler) : Promise<{ request: IBatchRequest, response: IBatchResponse }> => {
+interface IBatchIOResult {
+    request?: IBatchRequest;
+    response?: IBatchResponse;
+}
+
+const batchOps = (dataService : IDataService, opsHandler : IDataOperationsHandler) : Promise<IBatchIOResult> => {
     return dataService.getApiVersion().then(apiVersion => {
         const b = new BatchRequestBuilder(apiVersion.version);
         opsHandler(b);
         const request = b.request;
-        return dataService.batch(request).then(response => {
-            return {
-                request: request,
-                response: response
-            };
+        
+        const ios : IBatchIOResult[] = [];
+        const subRequests = request.batchRequests.concat([]);
+        // split our requests if necessary
+        if(subRequests.length > 25) {
+            while(subRequests.length > 0) {
+                ios.push({
+                    request: {
+                        batchRequests: subRequests.splice(0, subRequests.length < 25 ? request.batchRequests.length : 25)
+                    }
+                });
+            }
+        } else {
+            ios.push({ request: request });
+        }
+        return Promise.all(ios.map(io => {
+            return dataService.batch(io.request).then(response => {
+                io.response = response;
+            });
+        })).then(() => {
+            const mergedResponse : IBatchIOResult = { request: request, response: { hasErrors: false, results: [] } };
+            ios.forEach(io => {
+                mergedResponse.response.hasErrors = io.response.hasErrors;
+                mergedResponse.response.results = mergedResponse.response.results.concat(io.response.results);
+            });
+            return mergedResponse;
         });
+        
     });
 }
 
@@ -1026,6 +1054,9 @@ export {
     IChildRelationship,
     IUserRequest,
     IUserPasswordUpdateRequest,
-    INewPassword
+    INewPassword,
+    IBatchRequest,
+    IBatchResponse,
+    IBatchIOResult
 }
 

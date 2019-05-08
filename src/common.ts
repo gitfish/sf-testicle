@@ -1,7 +1,7 @@
 import { ISession, IAccess, IUserInfo } from "./auth/core";
 import * as qs from "qs";
 
-const jsonResponseErrorHandler = (response) => {
+const jsonResponseErrorHandler = (response : Response) => {
     return response.json().then(error => {
         throw {
             status: response.status,
@@ -11,18 +11,36 @@ const jsonResponseErrorHandler = (response) => {
     });
 };
 
+const textResponseErrorHandler = (response : Response) => {
+    return response.text().then(error => {
+        throw {
+            status: response.status,
+            statusText: response.statusText,
+            error: error
+        }
+    });
+};
+
+const responseErrorHandler = (response : Response) => {
+    const contentType = response.headers ? response.headers.get("content-type") : undefined;
+    if(contentType && contentType.indexOf("application/json") >= 0) {
+        return jsonResponseErrorHandler(response);
+    }
+    return textResponseErrorHandler(response);
+};
+
 const jsonResponseHandler = (response : Response) => {
     if(response.ok) {
         return response.json();
     }
-    return jsonResponseErrorHandler(response);
+    return responseErrorHandler(response);
 };
 
 const blobResponseHandler = (response : Response) => {
     if(response.ok) {
         return response.blob();
     }
-    return jsonResponseErrorHandler(response);
+    return responseErrorHandler(response);
 };
 
 interface IApiVersion {
@@ -123,7 +141,7 @@ class RestService implements ISession {
     public fetch(opts : any) : Promise<any> {
         return this.session.getAccess().then(tr => {
             return this.apiVersionPromise.then(apiVersion => {
-                let url = `${tr.instance_url}${apiVersion.url}${opts.path}`;
+                let url = opts.url || `${tr.instance_url}${apiVersion.url}${opts.path}`;
                 if(opts.qs) {
                     url += `?${qs.stringify(opts.qs)}`;
                 }
@@ -161,6 +179,7 @@ class RestService implements ISession {
 
 export {
     jsonResponseErrorHandler,
+    responseErrorHandler,
     jsonResponseHandler,
     blobResponseHandler,
     IApiVersion,
