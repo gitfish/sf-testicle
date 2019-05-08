@@ -15,7 +15,7 @@ const merge = async (opts : IMergeOptions) => {
     const userInfo = await dataService.getUserInfo();
     console.log(`-- User Info: ${JSON.stringify(userInfo, null, "\t")}`);
 
-    const queryResult = await dataService.query("select Id,(select Id,AccountId from Contacts),Name,Location_Group__c,Post_Location__c,Post__c from Account where Post_Location__c = 'Canberra' and Post__c = 'CHCH'");
+    const queryResult = await dataService.query("select Id,(select Id,AccountId from Contacts),Name,Location_Group__c,Post_Location__c,Post__c from Account where Post_Location__c = 'Singapore' and Post__c = 'SING'");
     const keyAccountMap : IKeyAccountMap = {};
     const updatedContacts = [];
     const forDelete = [];
@@ -78,8 +78,10 @@ const merge = async (opts : IMergeOptions) => {
                 });
             }
         });
-        console.log("-- Batch Result:");
-        console.log(JSON.stringify(batchResult, null, "\t"));
+        console.log("-- Contact Updates: " + updatedContacts.length);
+        console.log("-- Account Deletes: " + forDelete.length);
+        console.log("-- Batch Result: " + batchResult.response.results.length);
+        //console.log(JSON.stringify(batchResult, null, "\t"));
     }
 };
 

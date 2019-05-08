@@ -4,6 +4,14 @@ import * as qs from "qs";
 import { RestService } from "./common";
 import { IAccess, ISession, IUserInfo } from "./auth/core";
 
+interface IDataServiceConfig {
+    batchLimit: number
+};
+
+const DefaultDataServiceConfig : IDataServiceConfig = {
+    batchLimit: 25
+};
+
 interface IRecordAttributes {
     type?: string;
     url?: string;
@@ -1001,11 +1009,11 @@ const batchOps = (dataService : IDataService, opsHandler : IDataOperationsHandle
         const ios : IBatchIOResult[] = [];
         const subRequests = request.batchRequests.concat([]);
         // split our requests if necessary
-        if(subRequests.length > 25) {
+        if(subRequests.length > DefaultDataServiceConfig.batchLimit) {
             while(subRequests.length > 0) {
                 ios.push({
                     request: {
-                        batchRequests: subRequests.splice(0, subRequests.length < 25 ? request.batchRequests.length : 25)
+                        batchRequests: subRequests.splice(0, DefaultDataServiceConfig.batchLimit)
                     }
                 });
             }
@@ -1019,7 +1027,7 @@ const batchOps = (dataService : IDataService, opsHandler : IDataOperationsHandle
         })).then(() => {
             const mergedResponse : IBatchIOResult = { request: request, response: { hasErrors: false, results: [] } };
             ios.forEach(io => {
-                mergedResponse.response.hasErrors = io.response.hasErrors;
+                mergedResponse.response.hasErrors = mergedResponse.response.hasErrors || io.response.hasErrors;
                 mergedResponse.response.results = mergedResponse.response.results.concat(io.response.results);
             });
             return mergedResponse;
@@ -1057,6 +1065,8 @@ export {
     INewPassword,
     IBatchRequest,
     IBatchResponse,
-    IBatchIOResult
+    IBatchIOResult,
+    IDataServiceConfig,
+    DefaultDataServiceConfig
 }
 
