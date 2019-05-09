@@ -77,13 +77,15 @@ const batch = (dataService : IDataService, opsHandler : IDataOperationsHandler) 
 
 interface IQueryIteratorOptions extends IQueryRequest {
     dataService: IDataService;
+    queryResult?: IQueryResult;
     all?: boolean;
+    index?: number;
 }
 
 async function* queryIterator(opts : IQueryIteratorOptions) {
     const { dataService } = opts;
-    let qr : IQueryResult;
-    let idx = 0;
+    let qr : IQueryResult = opts.queryResult;
+    let idx = opts.index !== undefined && opts.index >= 0 ? opts.index : 0;
     const nextRecord = async () : Promise<IRecord> => {
         if(!qr) {
             qr = await dataService.query(opts);

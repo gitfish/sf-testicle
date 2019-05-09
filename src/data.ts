@@ -24,7 +24,7 @@ interface IRecord {
 }
 
 interface IQueryRequest {
-    query: string;
+    query?: string;
     batchSize?: number;
     all?: boolean;
 }
