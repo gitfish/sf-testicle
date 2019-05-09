@@ -66,7 +66,9 @@ const batch = (dataService : IDataService, opsHandler : IDataOperationsHandler) 
         })).then(() => {
             const mergedResponse : IBatchIOResult = { request: request, response: { hasErrors: false, results: [] } };
             ios.forEach(io => {
-                mergedResponse.response.hasErrors = mergedResponse.response.hasErrors || io.response.hasErrors;
+                if(io.response.hasErrors) {
+                    mergedResponse.response.hasErrors = true;
+                }
                 mergedResponse.response.results = mergedResponse.response.results.concat(io.response.results);
             });
             return mergedResponse;
