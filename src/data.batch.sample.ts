@@ -1,5 +1,6 @@
 import { createSession, IJwtSessionOptions } from "./auth/jwt";
-import { RestDataService, batchOps } from "./data";
+import { RestDataService } from "./data";
+import { batch } from "./data.util";
 import { program } from "./auth/jwt.sample.program";
 
 const session = createSession(program as IJwtSessionOptions);
@@ -10,7 +11,7 @@ const dataService = new RestDataService({
 
 const sample = async () => {
     try {
-        const result = await batchOps(dataService, ops => {
+        const result = await batch(dataService, ops => {
             ops.create({
                 attributes: {
                     type: "Contact"

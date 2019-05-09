@@ -23,11 +23,22 @@ interface IRecord {
     [key: string] : any; 
 }
 
+interface IQueryRequest {
+    query: string;
+    batchSize?: number;
+    all?: boolean;
+}
+
 interface IQueryResult {
     done: boolean;
     totalSize: number;
     records?: IRecord[];
     nextRecordsUrl?: string;
+}
+
+interface IQueryNextRequest {
+    nextRecordsUrl?: string;
+    batchSize?: number;
 }
 
 interface IQueryPlanFeedbackNote {
@@ -640,9 +651,8 @@ interface IDataOperations {
     describeCompactLayouts(type : string) : Promise<IDescribeCompactLayoutsResult>;
     describeLayout(type : string) : Promise<IDescribeLayoutResult>;
     describePublisherLayouts() : Promise<IDescribeLayoutResult>;
-    query(soql : string) : Promise<IQueryResult>;
+    query(request : IQueryRequest | string) : Promise<IQueryResult>;
     explain(soql : string) : Promise<IQueryExplainResult>;
-    queryAll(soql : string) : Promise<IQueryResult>;
     search(sosl : string) : Promise<ISearchResult>;
     parameterizedSearch(request : IParameterizedSearchRequest) : Promise<ISearchResult>;
     create(record : IRecord) : Promise<ISaveResult>;
@@ -720,27 +730,29 @@ class BaseDataOperations implements IDataOperations {
             path: "/limits/"
         });
     }
-    query(soql : string) : Promise<IQueryResult> {
-        return this.get({
-            path: "/query/",
+    query(request : IQueryRequest | string) : Promise<IQueryResult> {
+        const q = typeof(request) === "string" ? request : request.query;
+        const all = typeof(request) === "object" ? (request as IQueryRequest).all : false;
+        const opts : any = {
+            path: all ? "/queryAll/" : "/query/",
             qs: {
-                q: soql
+                q: q
             }
-        });
+        };
+        if(typeof(request) === "object") {
+            const params = request as any as IQueryRequest;
+            if(params.batchSize > 0) {
+                opts.headers = {};
+                opts.headers["Sforce-Query-Options"] = `batchSize=${params.batchSize}`;
+            }
+        }
+        return this.get(opts);
     }
     explain(soql : string) : Promise<IQueryExplainResult> {
         return this.get({
             path: "/query/",
             qs: {
                 explain: soql
-            }
-        });
-    }
-    queryAll(soql : string) : Promise<IQueryResult> {
-        return this.get({
-            path: "/queryAll/",
-            qs: {
-                q: soql
             }
         });
     }
@@ -888,38 +900,9 @@ interface IDataOperationsHandler {
     (ops : IDataOperations) : void;
 }
 
-class BatchRequestBuilder extends BaseDataOperations implements IDataOperations {
-    private subrequests : IBatchSubrequest[] = [];
-    private version : string;
-    constructor(version : string) {
-        super();
-        this.version = version;
-    }
-    fetch(opts : any) : Promise<any> {
-        let url = `v${this.version}${opts.path}`;
-        if(opts.qs) {
-            url += `?${qs.stringify(opts.qs)}`;
-        }
-        const subrequest : IBatchSubrequest = {
-            url: url,
-            method: opts.method ? opts.method : opts.body ? "POST" : "GET",
-            richInput: opts.body
-        };
-        this.subrequests.push(subrequest);
-        return Promise.resolve();
-    }
-    get request() : IBatchRequest {
-        return {
-            batchRequests: this.subrequests.map(r => {
-                return {...r};
-            })
-        };
-    }
-}
-
 interface IDataService extends IDataOperations, ISession {
     getApiVersion() : Promise<IApiVersion>;
-    queryNext(nextRequest : string | IQueryResult) : Promise<IQueryResult>;
+    queryNext(nextRequest : IQueryNextRequest | string) : Promise<IQueryResult>;
     batch(request : IBatchRequest) : Promise<IBatchResponse>;
 }
 
@@ -942,9 +925,19 @@ class RestDataService extends BaseDataOperations implements IDataService {
     fetch(opts : any) : Promise<any> {
         return this.rest.fetch(opts);
     }
-    queryNext(nextRequest : string | IQueryResult) : Promise<IQueryResult> {
-        const url = typeof(nextRequest) === "string" ? nextRequest : (nextRequest as IQueryResult).nextRecordsUrl;
-        return this.rest.get({ url: url });
+    queryNext(request : IQueryNextRequest | string) : Promise<IQueryResult> {
+        const url = typeof(request) === "string" ? request : (request as IQueryResult).nextRecordsUrl;
+        const opts : any = {
+           url
+        };
+        if(typeof(request) === "object") {
+            const params = request as any as IQueryNextRequest;
+            if(params.batchSize > 0) {
+                opts.headers = {};
+                opts.headers["Sforce-Query-Options"] = `batchSize=${params.batchSize}`;
+            }
+        }
+        return this.rest.get(opts);
     }
     upsert(record : IRecord, externalIdField?: string) : Promise<IUpsertResult> {
         const type = this.getSObjectType(record);
@@ -995,54 +988,15 @@ class RestDataService extends BaseDataOperations implements IDataService {
     }
 }
 
-interface IBatchIOResult {
-    request?: IBatchRequest;
-    response?: IBatchResponse;
-}
-
-const batchOps = (dataService : IDataService, opsHandler : IDataOperationsHandler) : Promise<IBatchIOResult> => {
-    return dataService.getApiVersion().then(apiVersion => {
-        const b = new BatchRequestBuilder(apiVersion.version);
-        opsHandler(b);
-        const request = b.request;
-        
-        const ios : IBatchIOResult[] = [];
-        const subRequests = request.batchRequests.concat([]);
-        // split our requests if necessary
-        if(subRequests.length > DefaultDataServiceConfig.batchLimit) {
-            while(subRequests.length > 0) {
-                ios.push({
-                    request: {
-                        batchRequests: subRequests.splice(0, DefaultDataServiceConfig.batchLimit)
-                    }
-                });
-            }
-        } else {
-            ios.push({ request: request });
-        }
-        return Promise.all(ios.map(io => {
-            return dataService.batch(io.request).then(response => {
-                io.response = response;
-            });
-        })).then(() => {
-            const mergedResponse : IBatchIOResult = { request: request, response: { hasErrors: false, results: [] } };
-            ios.forEach(io => {
-                mergedResponse.response.hasErrors = mergedResponse.response.hasErrors || io.response.hasErrors;
-                mergedResponse.response.results = mergedResponse.response.results.concat(io.response.results);
-            });
-            return mergedResponse;
-        });
-        
-    });
-}
-
 export {
     IDataOperations,
+    IDataOperationsHandler,
     IDataService,
     RestDataService,
     IApiVersion,
     IRecordAttributes,
     IRecord,
+    IQueryRequest,
     IQueryResult,
     IQueryPlanFeedbackNote,
     IQueryPlan,
@@ -1050,8 +1004,7 @@ export {
     ISearchSObjectSpec,
     IParameterizedSearchRequest,
     ISearchResult,
-    BatchRequestBuilder,
-    batchOps,
+    BaseDataOperations,
     IDescribeGlobalResult,
     IDescribeSObjectBasicResult,
     ISObjectDescribeResult,
@@ -1064,8 +1017,8 @@ export {
     IUserPasswordUpdateRequest,
     INewPassword,
     IBatchRequest,
+    IBatchSubrequest,
     IBatchResponse,
-    IBatchIOResult,
     IDataServiceConfig,
     DefaultDataServiceConfig
 }

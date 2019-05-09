@@ -51,7 +51,7 @@ const sample = async () => {
         const er = await dataService.explain("select Id,Name from User");
         console.log("-- Explain Result: " + JSON.stringify(er));
 
-        const qar = await dataService.queryAll("select Id,Name from User");
+        const qar = await dataService.query({ query: "select Id,Name from User", all: true });
         console.log("-- Query All Result: " + JSON.stringify(qar));
 
         const accounts = await dataService.query("select Id,Name,(select Id,Name from Contacts) from Account");

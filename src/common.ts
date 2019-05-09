@@ -141,7 +141,7 @@ class RestService implements ISession {
     public fetch(opts : any) : Promise<any> {
         return this.session.getAccess().then(tr => {
             return this.apiVersionPromise.then(apiVersion => {
-                let url = opts.url || `${tr.instance_url}${apiVersion.url}${opts.path}`;
+                let url = opts.url ? `${tr.instance_url}${opts.url}` : `${tr.instance_url}${apiVersion.url}${opts.path}`;
                 if(opts.qs) {
                     url += `?${qs.stringify(opts.qs)}`;
                 }
@@ -149,6 +149,11 @@ class RestService implements ISession {
                     Authorization: `Bearer ${tr.access_token}`
                 };
                 headers["Content-Type"] = opts.body ? "application/json" : undefined;
+                if(opts.headers) {
+                    for(const headerKey in opts.headers) {
+                        headers[headerKey] = opts.headers[headerKey];
+                    }
+                }
 
                 const fetchOpts = {
                     method: opts.method ? opts.method : opts.body || opts.form ? "POST" : "GET",

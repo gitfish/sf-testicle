@@ -1,4 +1,5 @@
-import { IDataService, IRecord, IQueryResult, batchOps } from "../data";
+import { IDataService, IRecord, IQueryResult } from "../data";
+import { batch, IBatchIOResult } from "../data.util";
 
 interface IMergeOptions {
     dataService: IDataService;
@@ -9,13 +10,10 @@ interface IKeyAccountMap {
 }
 
 // TODO: make this generic - currently serves a specific purpose
-const merge = async (opts : IMergeOptions) => {
+const merge = async (opts : IMergeOptions) : Promise<IBatchIOResult> => {
     const { dataService } = opts;
 
-    const userInfo = await dataService.getUserInfo();
-    console.log(`-- User Info: ${JSON.stringify(userInfo, null, "\t")}`);
-
-    const queryResult = await dataService.query("select Id,(select Id,AccountId from Contacts),Name,Location_Group__c,Post_Location__c,Post__c from Account where Post_Location__c = 'Singapore' and Post__c = 'SING'");
+    const queryResult = await dataService.query("select Id,(select Id,AccountId from Contacts),Name,Location_Group__c,Post_Location__c,Post__c from Account");
     const keyAccountMap : IKeyAccountMap = {};
     const updatedContacts = [];
     const forDelete = [];
@@ -66,7 +64,7 @@ const merge = async (opts : IMergeOptions) => {
 
     // go ahead and update contacts
     if(updatedContacts.length > 0 || forDelete.length > 0) {
-        const batchResult = await batchOps(dataService, ops => {
+        return batch(dataService, ops => {
             if(updatedContacts.length > 0) {
                 updatedContacts.forEach(contact => {
                     ops.update(contact);
@@ -78,11 +76,17 @@ const merge = async (opts : IMergeOptions) => {
                 });
             }
         });
-        console.log("-- Contact Updates: " + updatedContacts.length);
-        console.log("-- Account Deletes: " + forDelete.length);
-        console.log("-- Batch Result: " + batchResult.response.results.length);
-        //console.log(JSON.stringify(batchResult, null, "\t"));
     }
+
+    return {
+        request: {
+            batchRequests: []
+        },
+        response: {
+            hasErrors: false,
+            results: []
+        }
+    };
 };
 
 export {

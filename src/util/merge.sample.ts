@@ -11,6 +11,9 @@ const dataService = new RestDataService({
 
 merge({
     dataService: dataService
+}).then(result => {
+    console.log("-- Batch Result Count: " + result.response.results.length);
+    console.log("-- Batch Result: " + JSON.stringify(result.response.results));
 }).catch(ex => {
     console.log("-- Merge Error");
     console.error(ex);
