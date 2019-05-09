@@ -31,12 +31,13 @@ const merge = async (opts : IMergeOptions) : Promise<IBatchIOResult> => {
         const contactsResult : IQueryResult = account.Contacts;
         if(contactsResult && contactsResult.totalSize > 0) {
             const key = (account.Name + account.Location_Group__c + account.Post_Location__c + account.Post__c).toLowerCase();
-            const master = keyAccountMap[key];
-            if(!master) {
+            const target = keyAccountMap[key];
+            if(!target) {
                 keyAccountMap[key] = account;
             } else {
                 //contactMergePromises.push(mergeAccountContacts(contactsResult, master.Id));
-                await mergeAccountContacts(contactsResult, master.Id);
+                await mergeAccountContacts(contactsResult, target.Id);
+                accountsForDelete.push(target);
             }
         } else {
             accountsForDelete.push(account);
